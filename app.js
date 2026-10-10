@@ -121,18 +121,28 @@ function viewDay() {
 }
 
 function viewWeek() {
-  return S.days.map((d, i) => {
+  const days = S.days.map((d, i) => {
+    // The bar: how much of the day's room for tasks is already taken. Room = time of the tasks set for the day + what is still free in the windows.
     const cap = d.loadMin + d.freeMin;
     const pct = cap ? Math.min(100, Math.round((d.loadMin / cap) * 100)) : 0;
     const loose = d.tasks.filter((t) => !t.slot && !t.time && !t.optional).reduce((s, t) => s + (t.est || 30), 0);
     const over = S.hasWindows && loose > d.freeMin;
     const fixed = d.events.filter((e) => e.start).map((e) => `${e.start} ${esc(e.title)}`).slice(0, 3).join(" · ");
+    const room = S.hasWindows ? (d.loadMin ? `занято ${dur(d.loadMin)} из ${dur(cap)}` : `свободно ${dur(d.freeMin)}`) : "";
     return `<button class="wk" data-act="day" data-ix="${i}" data-go="1">
-      <div class="head"><b>${esc(d.label)}${i < 2 ? `, ${esc(d.sub)}` : ""}</b><span>${d.tasks.length ? `${d.tasks.length} · ~${dur(d.loadMin || d.tasks.length * 30)}` : "пусто"}</span></div>
+      <div class="head"><b>${esc(d.label)}${i < 2 ? `, ${esc(d.sub)}` : ""}</b><span>${d.tasks.length ? `задач: ${d.tasks.length}` : "пусто"}</span></div>
       <div class="bar ${over ? "over" : ""}"><i style="width:${pct}%"></i></div>
-      <p>${over ? "Не влезает в окна. " : ""}${S.hasWindows ? `Свободно ${dur(d.freeMin)}` : ""}${fixed ? `${S.hasWindows ? " · " : ""}${fixed}` : ""}</p>
+      <p>${over ? "Не всё влезает в окна. " : ""}${room}${fixed ? `${room ? " · " : ""}${fixed}` : ""}</p>
     </button>`;
-  }).join("") + (S.later.length ? `<h2>Дальше недели</h2>${cardOf(S.later.map((t) => taskRow(t, "later")))}` : "");
+  }).join("");
+  // Closed tasks, grouped by day: proof that the pile does move.
+  const byDay = new Map();
+  for (const t of S.done) byDay.set(t.label, [...(byDay.get(t.label) ?? []), t]);
+  const done = [...byDay].map(([label, ts]) => `<h2>${esc(label)} <span>· ${ts.length}</span></h2><div class="card">${ts.map((t) =>
+    `<div class="row done"><span class="check">${TICK}</span><div class="body"><div class="title">${esc(t.title)}</div>${t.project ? `<div class="meta"><span>${esc(t.project)}</span></div>` : ""}</div><button class="back" data-act="op" data-op="reopen" data-num="${t.num}">Вернуть</button></div>`).join("")}</div>`).join("");
+  return `<p class="sum">Полоска показывает, сколько времени под дела в этом дне уже занято задачами. Оранжевая: не влезает.</p>${days}
+    ${S.later.length ? `<h2>Дальше недели</h2>${cardOf(S.later.map((t) => taskRow(t, "later")))}` : ""}
+    ${S.done.length ? `<h2 class="sep">Сделано за две недели <span>· ${S.done.length}</span></h2>${done}` : ""}`;
 }
 
 function viewBacklog() {
@@ -152,7 +162,12 @@ function viewMemory() {
   const fixed = S.routines.filter((r) => r.kind === "fixed"), win = S.routines.filter((r) => r.kind === "window");
   const rt = (r) => `<div class="mem"><b>${esc(r.title)}</b> <small>${r.start}–${r.end} · ${esc(r.days)}</small>${r.hint ? `<p>${esc(r.hint)}</p>` : ""}</div>`;
   const pr = S.projects.filter((p) => p.open || p.notes.length || p.about);
-  return `${fixed.length ? `<h2>Постоянное</h2><div class="card">${fixed.map(rt).join("")}</div>` : ""}
+  const tracks = S.tracks.length
+    ? `<h2>Направления</h2><div class="card">${S.tracks.map((t) => `<div class="mem track" style="padding-left:${12 + t.depth * 16}px">
+        <div><b>${esc(t.title)}</b>${t.project ? ` <small>${esc(t.project)}</small>` : ""}<p>${esc(t.status)}${t.tasks ? ` · задач: ${t.tasks}` : ""}</p></div>
+        <button data-act="op" data-op="session" data-num="${t.num}">Подход</button></div>`).join("")}</div>`
+    : '<h2>Направления</h2><p class="sum">То, чем занимаешься постоянно, без конечной точки. Напиши внизу: «английский это направление, хочу три раза в неделю».</p>';
+  return `${tracks}${fixed.length ? `<h2>Постоянное</h2><div class="card">${fixed.map(rt).join("")}</div>` : ""}
     ${win.length ? `<h2>Окна для дел</h2><div class="card">${win.map(rt).join("")}</div>` : ""}
     ${!S.routines.length ? '<p class="sum">Расписания пока нет. Напиши внизу: «зал по вт и чт с 12 до 14», «днём с 12 до 17 дела».</p>' : ""}
     ${S.about.length ? `<h2>Про тебя</h2><div class="card"><div class="mem"><ul>${S.about.map((n) => `<li>${esc(n)}</li>`).join("")}</ul></div></div>` : ""}

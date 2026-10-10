@@ -111,3 +111,8 @@ h2 span { text-transform: none; letter-spacing: 0; font-weight: 500; }
 .sheet .cancel { background: none; color: var(--muted); font-weight: 500; padding: 10px; }
 /* The native picker opens on a tap anywhere on the tile: the input covers it, invisible. */
 .sheet label input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; }
+
+.back { flex: 0 0 auto; align-self: center; font-size: 13px; color: var(--muted); padding: 4px 6px; }
+h2.sep { margin-top: 26px; }
+.mem.track { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.mem.track button { flex: 0 0 auto; background: var(--bg); border-radius: 9px; padding: 6px 10px; font-size: 13px; font-weight: 500; }
