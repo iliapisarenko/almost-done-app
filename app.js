@@ -46,11 +46,12 @@ async function run(body, { quiet = false } = {}) {
     if (r.state) S = r.state;
     else S = r;
     if (!quiet) tg?.HapticFeedback?.notificationOccurred("success");
-    if (r.reply && !quiet) toast(r.reply, body.op !== "undo" && body.op !== "say" ? true : /Записал|Готово|Разбил|Убрал|✓|Запомнил|Перен|Поставил|Окно|Завёл|Завтра,|Сегодня,/.test(r.reply));
+    if (r.reply && !quiet) toast(r.reply, !!r.undoable);
     render();
   } catch (e) {
     tg?.HapticFeedback?.notificationOccurred("error");
     toast(e.message);
+    render(); // a row ticked in advance goes back to how the server has it
   } finally {
     document.body.classList.remove("busy");
   }
