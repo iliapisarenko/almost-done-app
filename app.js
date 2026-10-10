@@ -90,7 +90,7 @@ function taskRow(t, where) {
   return `<div class="row task" data-num="${t.num}">
     <button class="check ${t.optional ? "opt" : ""}" data-act="done" data-num="${t.num}" aria-label="Готово">${TICK}</button>
     <div class="body" data-act="toggle" data-num="${t.num}">
-      <div class="title">${esc(t.title)}</div>${meta(t, { showDate: where === "later" })}
+      <div class="title">${esc(t.title)}</div>${meta(t, { showDate: where === "later" || where === "project" })}
       ${isOpen ? `<div class="more">${steps}${t.notes ? `<p class="note">${esc(t.notes)}</p>` : ""}<div class="acts">${acts.join("")}</div></div>` : ""}
     </div></div>`;
 }
@@ -177,10 +177,91 @@ function viewMemory() {
     <p class="sum">Добавить: «сообщаю контекст по …». Убрать: «забудь …».</p>`;
 }
 
+// ---------- projects: pick one, work inside it ----------
+
+let proj = null; // name of the open project ("" = tasks without a project), null = the picker
+let pview = "a";
+try { pview = localStorage.getItem("pview") || "a"; } catch (_) { /* private mode: the default stays */ }
+const hue = (name) => [...name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+
+function allTasks() {
+  const seen = new Set();
+  return [...S.days.flatMap((d) => d.tasks), ...S.backlog, ...S.later].filter((t) => !seen.has(t.num) && seen.add(t.num));
+}
+
+/** Directions of a project: its top-level ones with everything nested under them. */
+function tracksOf(name) {
+  const out = [];
+  let inside = false;
+  for (const t of S.tracks) {
+    if (t.depth === 0) inside = (t.project ?? "") === name;
+    if (inside) out.push(t);
+  }
+  return out;
+}
+
+function projectList() {
+  const by = new Map();
+  for (const t of allTasks()) by.set(t.project ?? "", [...(by.get(t.project ?? "") ?? []), t]);
+  const names = new Set([...by.keys(), ...S.tracks.filter((t) => t.depth === 0 && t.project).map((t) => t.project)]);
+  return [...names].map((name) => {
+    const tasks = by.get(name) ?? [];
+    const dls = tasks.filter((t) => t.deadline).sort((a, b) => a.deadline.localeCompare(b.deadline));
+    return {
+      name, tasks, min: tasks.reduce((s, t) => s + (t.est || 30), 0), today: tasks.filter((t) => t.date && t.date <= S.today).length,
+      deadline: dls[0]?.deadlineLabel ?? null, tracks: tracksOf(name).length,
+    };
+  }).sort((a, b) => (a.name === "" ? 1 : b.name === "" ? -1 : b.tasks.length - a.tasks.length));
+}
+
+function viewProjects() {
+  if (proj !== null) return viewProject(proj);
+  const list = projectList();
+  if (!list.length) return '<p class="hint">Проектов с задачами пока нет.</p>';
+  const title = (p) => esc(p.name || "Без проекта");
+  const count = (p) => `${p.tasks.length ? `~${dur(p.min)}` : "нет задач"}${p.tracks ? ` · направлений ${p.tracks}` : ""}`;
+  const max = Math.max(...list.map((p) => p.min), 1);
+  const body = {
+    // A: a grid of cards, the number of tasks large.
+    a: () => `<div class="pgrid">${list.map((p) => `<button class="pcard" style="--h:${hue(p.name)}" data-act="proj" data-name="${esc(p.name)}">
+        <b>${title(p)}</b><div class="n"><strong>${p.tasks.length}</strong>${p.tasks.length ? `~${dur(p.min)}` : "нет задач"}${p.deadline ? `<br><span class="dl">${esc(p.deadline)}</span>` : ""}</div></button>`).join("")}</div>`,
+    // B: rows with a bar of how heavy the project is next to the others, and what comes first in it.
+    b: () => list.map((p) => `<button class="prow" style="--h:${hue(p.name)}" data-act="proj" data-name="${esc(p.name)}">
+        <div class="head"><b>${title(p)}</b><span>${p.tasks.length} · ${count(p)}</span></div>
+        <div class="bar"><i style="width:${Math.round((p.min / max) * 100)}%"></i></div>
+        <p>${p.deadline ? `${esc(p.deadline)} · ` : ""}${p.tasks[0] ? esc(p.tasks[0].title) : "задач нет"}</p></button>`).join(""),
+    // C: big tiles with the first three tasks visible.
+    c: () => list.map((p) => `<button class="ptile" style="--h:${hue(p.name)}" data-act="proj" data-name="${esc(p.name)}">
+        <div class="head"><b>${title(p)}</b><span>${p.tasks.length} · ${count(p)}</span></div>
+        <ul>${p.tasks.slice(0, 3).map((t) => `<li>${esc(t.title)}</li>`).join("")}</ul>
+        ${p.deadline ? `<span class="dl">${esc(p.deadline)}</span>` : ""}</button>`).join(""),
+  }[pview]();
+  return `<p class="sum">Выбери проект, которым займёшься сейчас.</p>${body}
+    <div class="vsw">Вид: ${["a", "b", "c"].map((v) => `<button class="${v === pview ? "on" : ""}" data-act="pview" data-v="${v}">${v.toUpperCase()}</button>`).join("")}</div>`;
+}
+
+function viewProject(name) {
+  const p = projectList().find((x) => x.name === name);
+  const info = S.projects.find((x) => x.name === name);
+  const tasks = p?.tasks ?? [];
+  const tracks = tracksOf(name);
+  const dl = tasks.filter((t) => t.deadline), dated = tasks.filter((t) => !t.deadline && t.date), rest = tasks.filter((t) => !t.deadline && !t.date);
+  return `<div class="phead"><button data-act="proj-back">‹ Проекты</button><h1>${esc(name || "Без проекта")}</h1></div>
+    ${info?.about ? `<p class="pabout">${esc(info.about)}</p>` : ""}
+    ${tasks.length && S.hasWindows ? `<button class="big" data-act="take" data-name="${esc(name)}">Взять в работу сегодня</button>` : ""}
+    ${tracks.length ? `<h2>Направления</h2><div class="card">${tracks.map((t) => `<div class="mem track" style="padding-left:${12 + t.depth * 16}px">
+        <div><b>${esc(t.title)}</b><p>${esc(t.status)}${t.tasks ? ` · задач: ${t.tasks}` : ""}</p></div><button data-act="op" data-op="session" data-num="${t.num}">Подход</button></div>`).join("")}</div>` : ""}
+    ${dl.length ? `<h2>Со сроком</h2>${cardOf(dl.map((t) => taskRow(t, "project")))}` : ""}
+    ${dated.length ? `<h2>Стоят на днях</h2>${cardOf(dated.map((t) => taskRow(t, "project")))}` : ""}
+    ${rest.length ? `<h2>Запас <span>· ${rest.length}</span></h2>${cardOf(rest.map((t) => taskRow(t, "project")))}` : ""}
+    ${!tasks.length ? '<p class="hint">Открытых задач нет. Добавь внизу: «' + esc(name) + ': …».</p>' : ""}
+    ${info?.notes?.length ? `<h2>Помню</h2><div class="card"><div class="mem"><ul>${info.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul></div></div>` : ""}`;
+}
+
 function render() {
   if (!S) return;
   document.querySelectorAll("#seg button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
-  $("view").innerHTML = { day: viewDay, week: viewWeek, backlog: viewBacklog, memory: viewMemory }[tab]();
+  $("view").innerHTML = { day: viewDay, week: viewWeek, projects: viewProjects, backlog: viewBacklog, memory: viewMemory }[tab]();
 }
 
 // ---------- events ----------
@@ -198,6 +279,22 @@ document.addEventListener("click", (e) => {
   if (act === "hide") return void ($("toast").hidden = true);
   if (act === "undo") return void run({ op: "undo" });
   if (act === "redo") return void run({ op: "say", text: "отмени отмену" });
+  if (act === "proj") {
+    proj = el.dataset.name;
+    window.scrollTo(0, 0);
+    return render();
+  }
+  if (act === "proj-back") {
+    proj = null;
+    return render();
+  }
+  if (act === "pview") {
+    pview = el.dataset.v;
+    try { localStorage.setItem("pview", pview); } catch (_) { /* not kept between visits, that is all */ }
+    return render();
+  }
+  // "Take it today": the planner picks from this project only and puts the tasks on the clock.
+  if (act === "take") return void run({ op: "say", text: el.dataset.name ? `распланируй сегодня, бери только задачи проекта ${el.dataset.name}` : "распланируй сегодня, бери только задачи без проекта" });
   if (act === "day") {
     dayIx = Number(ix);
     if (el.dataset.go) tab = "day";
