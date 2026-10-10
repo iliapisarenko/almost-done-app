@@ -152,3 +152,12 @@ h2.sep { margin-top: 26px; }
 .sheet .plist button { display: flex; justify-content: space-between; align-items: baseline; text-align: left; padding: 12px 14px; }
 .sheet .plist button small { margin: 0; }
 .sheet .plist button.on { box-shadow: inset 0 0 0 2px var(--accent); }
+
+.sheet .grid.three { grid-template-columns: repeat(3, 1fr); }
+.sheet .grid button.on { box-shadow: inset 0 0 0 2px var(--accent); }
+.sheet .grid .note { text-align: left; margin: 2px 4px; }
+
+.sheet .dial { display: flex; align-items: center; gap: 6px; margin: 10px 0; }
+.sheet .dial button { flex: 0 0 56px; padding: 11px 0; }
+.sheet .dial b { flex: 1; text-align: center; font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sheet .go { background: var(--accent); color: var(--on-accent); }

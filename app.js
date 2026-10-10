@@ -343,6 +343,7 @@ function openSheet(num) {
     <div class="grid">${quick}
       <label class="wide">На дату…<small>выбрать в календаре</small><input type="date" id="sheetDate" min="${S.today}" value="${t.date && t.date >= S.today ? t.date : S.today}"></label>
       ${t.date ? '<button class="wide" data-sheet="undate">Убрать с дня<small>вернуть в запас</small></button>' : ""}
+      <button class="wide" data-sheet="estimates">Время на задачу…<small>${t.est ? `сейчас ~${dur(t.est)}` : "оценки нет"}</small></button>
       <button class="wide" data-sheet="projects">В другой проект…<small>${t.project ? `сейчас: ${esc(t.project)}` : "сейчас без проекта"}</small></button>
       <button class="wide cancel" data-sheet="close">Отмена</button>
     </div>`;
@@ -365,6 +366,29 @@ function openProjectSheet(num) {
     <div class="plist">${list.map((p) => `<button data-sheet="project" data-project="${p.num}" class="${p.name === t.project ? "on" : ""}">${esc(p.name)}${p.open ? `<small>задач: ${p.open}</small>` : ""}</button>`).join("")}
       ${t.project ? '<button data-sheet="project" data-project="">Без проекта</button>' : ""}</div>
     <div class="grid"><button class="wide cancel" data-sheet="close">Отмена</button></div>`;
+  $("sheet").dataset.num = num;
+  $("sheet").hidden = false;
+  $("veil").hidden = false;
+}
+
+/** Second page of the sheet: how long the task should take. Ready values, or any figure dialled in by hand. */
+let estDraft = 30;
+function openEstimateSheet(num, keep = false) {
+  const t = findTask(num);
+  if (!t) return;
+  if (!keep) estDraft = t.est || 30;
+  const steps = (t.steps ?? []).some((x) => !x.done);
+  $("sheet").innerHTML = `<h3>${esc(t.title)}</h3>
+    <div class="grid three">${[10, 15, 30, 45, 60, 90, 120, 180, 240].map((m) => `<button data-sheet="estimate" data-min="${m}" class="${t.est === m ? "on" : ""}">${dur(m)}</button>`).join("")}</div>
+    <div class="dial">
+      <button data-sheet="dial" data-d="-15">−15</button><button data-sheet="dial" data-d="-5">−5</button>
+      <b>${dur(estDraft)}</b>
+      <button data-sheet="dial" data-d="5">+5</button><button data-sheet="dial" data-d="15">+15</button>
+    </div>
+    <div class="grid">
+      <button class="wide go" data-sheet="estimate" data-min="${estDraft}">Поставить ${dur(estDraft)}</button>
+      ${steps ? '<p class="wide note">У задачи есть шаги: если время стоит у каждого шага, показывается их сумма.</p>' : ""}
+      <button class="wide cancel" data-sheet="close">Отмена</button></div>`;
   $("sheet").dataset.num = num;
   $("sheet").hidden = false;
   $("veil").hidden = false;
@@ -413,7 +437,14 @@ document.addEventListener("click", (e) => {
   if (!b) return;
   const num = Number($("sheet").dataset.num);
   if (b.dataset.sheet === "projects") return openProjectSheet(num);
+  if (b.dataset.sheet === "estimates") return openEstimateSheet(num);
+  if (b.dataset.sheet === "dial") {
+    estDraft = Math.min(1440, Math.max(5, estDraft + Number(b.dataset.d)));
+    tg?.HapticFeedback?.selectionChanged();
+    return openEstimateSheet(num, true);
+  }
   closeSheet();
+  if (b.dataset.sheet === "estimate") run({ op: "estimate", num, minutes: Number(b.dataset.min) });
   if (b.dataset.sheet === "project") run({ op: "project", num, project: b.dataset.project ? Number(b.dataset.project) : null });
   if (b.dataset.sheet === "move") run({ op: "move", num, date: b.dataset.date });
   if (b.dataset.sheet === "undate") run({ op: "undate", num });
