@@ -204,6 +204,91 @@ document.addEventListener("click", (e) => {
   if (act === "plan") return void run({ op: "say", text: `распланируй день ${date}` });
 });
 
+// ---------- long press on a task: put it on a day ----------
+
+const HOLD_MS = 450;
+let hold = null; // { timer, x, y, row }
+let swallowClick = false; // the click that ends a long press must not also expand the row
+
+function findTask(num) {
+  const all = [...S.days.flatMap((d) => d.tasks), ...S.backlog, ...S.later, ...S.someday];
+  return all.find((t) => t.num === num) ?? all.flatMap((t) => t.steps.map((s) => ({ ...s, steps: [] }))).find((s) => s.num === num);
+}
+
+function closeSheet() {
+  $("sheet").hidden = true;
+  $("veil").hidden = true;
+}
+
+function openSheet(num) {
+  const t = findTask(num);
+  if (!t) return;
+  const day = (i) => S.days[i];
+  // The next few days by name, then any date from the system picker.
+  const quick = [0, 1, 2, 3].map((i) => `<button data-sheet="move" data-date="${day(i).date}">${esc(day(i).label)}${day(i).label === day(i).sub ? "" : `<small>${esc(day(i).sub)}</small>`}</button>`).join("");
+  $("sheet").innerHTML = `<h3>${esc(t.title)}</h3>
+    <div class="grid">${quick}
+      <label class="wide">На дату…<small>выбрать в календаре</small><input type="date" id="sheetDate" min="${S.today}" value="${t.date && t.date >= S.today ? t.date : S.today}"></label>
+      ${t.date ? '<button class="wide" data-sheet="undate">Убрать с дня<small>вернуть в запас</small></button>' : ""}
+      <button class="wide cancel" data-sheet="close">Отмена</button>
+    </div>`;
+  $("sheet").dataset.num = num;
+  $("sheet").hidden = false;
+  $("veil").hidden = false;
+  $("sheetDate").addEventListener("change", (e) => {
+    if (!e.target.value) return;
+    closeSheet();
+    run({ op: "move", num, date: e.target.value });
+  });
+}
+
+function dropHold() {
+  if (!hold) return;
+  clearTimeout(hold.timer);
+  hold.row.classList.remove("held");
+  hold = null;
+}
+
+document.addEventListener("pointerdown", (e) => {
+  const row = e.target.closest(".row.task");
+  // Not on the checkbox, and not inside the expanded part with its own buttons.
+  if (!row || e.target.closest(".check, .more") || !S) return;
+  dropHold();
+  hold = { x: e.clientX, y: e.clientY, row, timer: setTimeout(() => {
+    const num = Number(row.dataset.num);
+    dropHold();
+    swallowClick = true;
+    tg?.HapticFeedback?.impactOccurred("medium");
+    openSheet(num);
+  }, HOLD_MS) };
+  row.classList.add("held");
+});
+// A finger that moves is scrolling, not holding.
+document.addEventListener("pointermove", (e) => {
+  if (hold && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 10) dropHold();
+});
+for (const ev of ["pointerup", "pointercancel", "scroll"]) document.addEventListener(ev, dropHold, true);
+document.addEventListener("contextmenu", (e) => {
+  if (e.target.closest(".row.task")) e.preventDefault();
+});
+document.addEventListener("click", (e) => {
+  if (swallowClick) {
+    swallowClick = false;
+    if (!e.target.closest("#sheet, #veil")) {
+      e.stopPropagation();
+      e.preventDefault();
+      return;
+    }
+  }
+  if (e.target.id === "veil") return closeSheet();
+  const b = e.target.closest("[data-sheet]");
+  if (!b) return;
+  const num = Number($("sheet").dataset.num);
+  closeSheet();
+  if (b.dataset.sheet === "move") run({ op: "move", num, date: b.dataset.date });
+  if (b.dataset.sheet === "undate") run({ op: "undate", num });
+}, true);
+
 $("sayInput").addEventListener("input", (e) => ($("sayBtn").disabled = !e.target.value.trim()));
 $("say").addEventListener("submit", (e) => {
   e.preventDefault();

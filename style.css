@@ -97,3 +97,17 @@ h2 span { text-transform: none; letter-spacing: 0; font-weight: 500; }
 .say button:disabled { opacity: .35; }
 .say button svg { width: 20px; height: 20px; }
 .busy { opacity: .55; pointer-events: none; }
+
+/* long press on a task: where to put it */
+.row.task { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.row.task.held { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.veil { position: fixed; inset: 0; z-index: 20; background: rgba(0, 0, 0, .35); }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; background: var(--bg); border-radius: 18px 18px 0 0; padding: 14px 12px calc(14px + env(safe-area-inset-bottom)); box-shadow: 0 -8px 30px rgba(0, 0, 0, .25); }
+.sheet h3 { margin: 2px 4px 12px; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.sheet .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sheet button, .sheet label { display: block; text-align: center; background: var(--card); border-radius: 12px; padding: 13px 8px; font-weight: 600; position: relative; }
+.sheet button small, .sheet label small { display: block; font-weight: 400; font-size: 12px; color: var(--muted); margin-top: 1px; }
+.sheet .wide { grid-column: 1 / -1; }
+.sheet .cancel { background: none; color: var(--muted); font-weight: 500; padding: 10px; }
+/* The native picker opens on a tap anywhere on the tile: the input covers it, invisible. */
+.sheet label input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; }
