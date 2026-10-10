@@ -161,3 +161,6 @@ h2.sep { margin-top: 26px; }
 .sheet .dial button { flex: 0 0 56px; padding: 11px 0; }
 .sheet .dial b { flex: 1; text-align: center; font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .sheet .go { background: var(--accent); color: var(--on-accent); }
+
+/* The menu has grown: on a short screen it scrolls instead of running off the top. */
+.sheet { max-height: 86vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
