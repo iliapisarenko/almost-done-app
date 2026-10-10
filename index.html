@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="format-detection" content="telephone=no">
+<title>Almost done</title>
+<link rel="icon" href="data:,">
+<script src="https://telegram.org/js/telegram-web-app.js?v=202610101604"></script>
+<link rel="stylesheet" href="style.css?v=202610101604">
+</head>
+<body>
+<header class="top">
+  <nav class="seg" id="seg">
+    <button data-tab="day" class="on">День</button>
+    <button data-tab="week">Неделя</button>
+    <button data-tab="backlog">Запас</button>
+    <button data-tab="memory">Память</button>
+  </nav>
+</header>
+<main id="view"><p class="hint">Загружаю…</p></main>
+<div class="toast" id="toast" hidden></div>
+<form class="say" id="say" autocomplete="off">
+  <input id="sayInput" type="text" enterkeyhint="send" placeholder="Задача, перенос, вопрос…" aria-label="Написать планеру">
+  <button id="sayBtn" type="submit" aria-label="Отправить" disabled>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+  </button>
+</form>
+<script src="app.js?v=202610101604"></script>
+</body>
+</html>
