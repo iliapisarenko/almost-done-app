@@ -343,6 +343,7 @@ function openSheet(num) {
     <div class="grid">${quick}
       <label class="wide">На дату…<small>выбрать в календаре</small><input type="date" id="sheetDate" min="${S.today}" value="${t.date && t.date >= S.today ? t.date : S.today}"></label>
       ${t.date ? '<button class="wide" data-sheet="undate">Убрать с дня<small>вернуть в запас</small></button>' : ""}
+      <button class="wide" data-sheet="projects">В другой проект…<small>${t.project ? `сейчас: ${esc(t.project)}` : "сейчас без проекта"}</small></button>
       <button class="wide cancel" data-sheet="close">Отмена</button>
     </div>`;
   $("sheet").dataset.num = num;
@@ -353,6 +354,20 @@ function openSheet(num) {
     closeSheet();
     run({ op: "move", num, date: e.target.value });
   });
+}
+
+/** Second page of the sheet: which project the task belongs to. Projects in use come first. */
+function openProjectSheet(num) {
+  const t = findTask(num);
+  if (!t) return;
+  const list = [...S.projects].sort((a, b) => b.open - a.open || a.name.localeCompare(b.name));
+  $("sheet").innerHTML = `<h3>${esc(t.title)}</h3>
+    <div class="plist">${list.map((p) => `<button data-sheet="project" data-project="${p.num}" class="${p.name === t.project ? "on" : ""}">${esc(p.name)}${p.open ? `<small>задач: ${p.open}</small>` : ""}</button>`).join("")}
+      ${t.project ? '<button data-sheet="project" data-project="">Без проекта</button>' : ""}</div>
+    <div class="grid"><button class="wide cancel" data-sheet="close">Отмена</button></div>`;
+  $("sheet").dataset.num = num;
+  $("sheet").hidden = false;
+  $("veil").hidden = false;
 }
 
 function dropHold() {
@@ -397,7 +412,9 @@ document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-sheet]");
   if (!b) return;
   const num = Number($("sheet").dataset.num);
+  if (b.dataset.sheet === "projects") return openProjectSheet(num);
   closeSheet();
+  if (b.dataset.sheet === "project") run({ op: "project", num, project: b.dataset.project ? Number(b.dataset.project) : null });
   if (b.dataset.sheet === "move") run({ op: "move", num, date: b.dataset.date });
   if (b.dataset.sheet === "undate") run({ op: "undate", num });
 }, true);
