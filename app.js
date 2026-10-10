@@ -466,4 +466,15 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden && S) run({ op: "state" }, { quiet: true });
 });
 
+// Telegram's webview and GitHub Pages both hold on to the page for minutes. On start, ask for the page past every
+// cache and, when a newer build is out, load it at once instead of showing yesterday's menu.
+const BUILD = (document.currentScript?.src.match(/v=(\d+)/) ?? [])[1];
+(async () => {
+  try {
+    const html = await (await fetch(`${location.pathname}?t=${Date.now()}`, { cache: "no-store" })).text();
+    const latest = (html.match(/app\.js\?v=(\d+)/) ?? [])[1];
+    if (BUILD && latest && latest !== BUILD && !location.search.includes(`b=${latest}`)) location.replace(`${location.pathname}?b=${latest}${location.hash}`);
+  } catch (_) { /* offline or blocked: the build at hand still works */ }
+})();
+
 run({ op: "state" }, { quiet: true });
