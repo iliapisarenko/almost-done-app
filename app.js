@@ -181,6 +181,7 @@ document.addEventListener("click", (e) => {
   const { act, num, op, date, ix } = el.dataset;
   if (act === "hide") return void ($("toast").hidden = true);
   if (act === "undo") return void run({ op: "undo" });
+  if (act === "redo") return void run({ op: "say", text: "отмени отмену" });
   if (act === "day") {
     dayIx = Number(ix);
     if (el.dataset.go) tab = "day";
