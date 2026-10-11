@@ -64,6 +64,7 @@ function meta(t, { showDate = false } = {}) {
   // Only the most pressing tasks carry the word; the rest are simply higher or lower in the list.
   if (t.urgent) bits.push('<span class="hot">срочно</span>');
   if (t.waiting) bits.push(`<span class="wait">жду: ${esc(t.waiting)}</span>`);
+  if (t.after) bits.push(`<span class="wait">🔒 после: ${esc(t.after)}</span>`);
   if (t.slot) bits.push(`<span class="slot">${t.slot[0]}–${t.slot[1]}</span>`);
   else if (t.time) bits.push(`<span class="slot">${t.time}</span>`);
   if (t.est) bits.push(`~${dur(t.est)}`);
@@ -150,7 +151,7 @@ function viewWeek() {
 }
 
 /** Tasks that cannot be started before their date: out of the way, one line that opens. */
-let showLater = false;
+let showLater = false, showBlocked = false;
 function waiting(tasks) {
   if (!tasks.length) return "";
   const sorted = [...tasks].sort((a, b) => a.date.localeCompare(b.date));
@@ -158,8 +159,15 @@ function waiting(tasks) {
     <button class="big ghost" data-act="later">${showLater ? "Свернуть" : `Показать (ближайшая ${sorted[0].date.slice(8)}.${sorted[0].date.slice(5, 7)})`}</button>`;
 }
 
+/** Hidden until another task is closed: collapsed, like what waits for its date. */
+function blockedList(tasks) {
+  if (!tasks.length) return "";
+  return `<h2>Ждут другую задачу <span>· ${tasks.length}</span></h2>${showBlocked ? cardOf(tasks.map((t) => taskRow(t, "later"))) : ""}
+    <button class="big ghost" data-act="blocked">${showBlocked ? "Свернуть" : "Показать"}</button>`;
+}
+
 function viewBacklog() {
-  if (!S.backlog.length && !S.someday.length && !S.later.length) return '<p class="hint">Запас пуст: всё либо стоит на днях, либо сделано.</p>';
+  if (!S.backlog.length && !S.someday.length && !S.later.length && !(S.blocked ?? []).length) return '<p class="hint">Запас пуст: всё либо стоит на днях, либо сделано.</p>';
   const groups = new Map();
   for (const t of S.backlog) groups.set(t.project ?? "", [...(groups.get(t.project ?? "") ?? []), t]);
   const urgent = S.backlog.filter((t) => t.deadline);
@@ -169,6 +177,7 @@ function viewBacklog() {
     ${urgent.length ? `<h2>Со сроком</h2>${cardOf(urgent.map((t) => taskRow(t, "backlog")))}` : ""}
     ${order.map((p) => `<h2>${p ? esc(p) : "Без проекта"} <span>· ${groups.get(p).filter((t) => !t.deadline).length}</span></h2>${cardOf(groups.get(p).filter((t) => !t.deadline).map((t) => taskRow(t, "backlog")))}`).join("")}
     ${waiting(S.later)}
+    ${blockedList(S.blocked ?? [])}
     ${S.someday.length ? `<h2>Когда-нибудь <span>· ${S.someday.length}</span></h2>${cardOf(S.someday.map((t) => taskRow(t, "someday")))}` : ""}`;
 }
 
@@ -213,7 +222,7 @@ const hue = (name) => [...name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 36
 
 function allTasks() {
   const seen = new Set();
-  return [...S.days.flatMap((d) => d.tasks), ...S.backlog, ...S.later].filter((t) => !seen.has(t.num) && seen.add(t.num));
+  return [...S.days.flatMap((d) => d.tasks), ...S.backlog, ...S.later, ...(S.blocked ?? [])].filter((t) => !seen.has(t.num) && seen.add(t.num));
 }
 
 /** Directions of a project: its top-level ones with everything nested under them. */
@@ -235,7 +244,7 @@ function projectList() {
   return [...names].map((name) => {
     const tasks = by.get(name) ?? [];
     // Dated beyond the week in view: waiting for its date, not something to pick up now.
-    const wait = tasks.filter((t) => t.date && t.date > horizon), ready = tasks.filter((t) => !wait.includes(t));
+    const wait = tasks.filter((t) => t.after || (t.date && t.date > horizon)), ready = tasks.filter((t) => !wait.includes(t));
     const dls = tasks.filter((t) => t.deadline).sort((a, b) => a.deadline.localeCompare(b.deadline));
     return {
       name, tasks, ready, wait: wait.length, min: ready.reduce((s, t) => s + (t.est || 30), 0), today: tasks.filter((t) => t.date && t.date <= S.today).length,
@@ -249,7 +258,7 @@ function viewProjects() {
   const list = projectList();
   if (!list.length) return '<p class="hint">Проектов с задачами пока нет.</p>';
   const title = (p) => esc(p.name || "Без проекта");
-  const load = (p) => [p.ready.length ? `~${dur(p.min)}` : p.wait ? "" : "нет задач", p.wait ? `ждут даты: ${p.wait}` : ""].filter(Boolean);
+  const load = (p) => [p.ready.length ? `~${dur(p.min)}` : p.wait ? "" : "нет задач", p.wait ? `ждут: ${p.wait}` : ""].filter(Boolean);
   const count = (p) => `${load(p).join(" · ")}${p.tracks ? ` · направлений ${p.tracks}` : ""}`;
   const max = Math.max(...list.map((p) => p.min), 1);
   const body = {
@@ -280,8 +289,9 @@ function viewProject(name) {
   const launches = tracks.filter((t) => t.stage === "launch").map((t) => ({ t, left: (p?.tasks ?? []).filter((x) => x.parent === t.title) }));
   const inLaunch = new Set(launches.flatMap((l) => l.left.map((x) => x.num)));
   const horizon = S.days[S.days.length - 1].date; // the week in view; beyond it a dated task is waiting, not planned
-  const far = tasks.filter((t) => t.date && t.date > horizon);
-  const near = tasks.filter((t) => !far.includes(t) && !inLaunch.has(t.num));
+  const held = tasks.filter((t) => t.after && !inLaunch.has(t.num));
+  const far = tasks.filter((t) => !t.after && t.date && t.date > horizon);
+  const near = tasks.filter((t) => !far.includes(t) && !held.includes(t) && !inLaunch.has(t.num));
   const dl = near.filter((t) => t.deadline), dated = near.filter((t) => !t.deadline && t.date), rest = near.filter((t) => !t.deadline && !t.date);
   const settings = `<h2>Направления</h2>${tracks.length ? `<div class="card">${tracks.map(trackRow).join("")}</div>` : ""}
     <p class="sum">Новое: напиши внизу «в ${esc(name || "…")} направление …». Тап по направлению: пауза, запуск, как часто.</p>
@@ -296,6 +306,7 @@ function viewProject(name) {
     ${dated.length ? `<h2>Стоят на днях</h2>${cardOf(dated.map((t) => taskRow(t, "project")))}` : ""}
     ${rest.length ? `<h2>Запас <span>· ${rest.length}</span></h2>${cardOf(rest.map((t) => taskRow(t, "project")))}` : ""}
     ${waiting(far)}
+    ${blockedList(held)}
     ${!tasks.length ? '<p class="hint">Открытых задач нет. Добавь внизу: «' + esc(name) + ': …».</p>' : ""}`}`;
 }
 
@@ -338,6 +349,10 @@ document.addEventListener("click", (e) => {
   }
   if (act === "later") {
     showLater = !showLater;
+    return render();
+  }
+  if (act === "blocked") {
+    showBlocked = !showBlocked;
     return render();
   }
   if (act === "tracks") {
@@ -390,7 +405,7 @@ let hold = null; // { timer, x, y, row }
 let swallowClick = false; // the click that ends a long press must not also expand the row
 
 function findTask(num) {
-  const all = [...S.days.flatMap((d) => d.tasks), ...S.backlog, ...S.later, ...S.someday];
+  const all = [...S.days.flatMap((d) => d.tasks), ...S.backlog, ...S.later, ...S.someday, ...(S.blocked ?? [])];
   return all.find((t) => t.num === num) ?? all.flatMap((t) => t.steps.map((s) => ({ ...s, steps: [] }))).find((s) => s.num === num);
 }
 
