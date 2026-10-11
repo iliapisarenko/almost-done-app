@@ -169,3 +169,5 @@ h2.sep { margin-top: 26px; }
 .phead .gear { flex: 0 0 auto; width: 38px; height: 38px; padding: 0; font-size: 18px; border-radius: 50%; }
 .phead .gear.on { background: var(--accent); color: var(--on-accent); }
 .mem.track button.danger { color: #d0443e; }
+
+.meta .hot { color: #fff; background: #d0443e; border-radius: 6px; padding: 0 6px; font-weight: 700; font-size: 11.5px; line-height: 1.5; }

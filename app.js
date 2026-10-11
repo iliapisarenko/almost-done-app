@@ -61,6 +61,8 @@ async function run(body, { quiet = false } = {}) {
 
 function meta(t, { showDate = false } = {}) {
   const bits = [];
+  // Only the most pressing tasks carry the word; the rest are simply higher or lower in the list.
+  if (t.urgent) bits.push('<span class="hot">срочно</span>');
   if (t.slot) bits.push(`<span class="slot">${t.slot[0]}–${t.slot[1]}</span>`);
   else if (t.time) bits.push(`<span class="slot">${t.time}</span>`);
   if (t.est) bits.push(`~${dur(t.est)}`);
@@ -379,6 +381,7 @@ function openSheet(num) {
     <div class="grid">${quick}
       <label class="wide">На дату…<small>выбрать в календаре</small><input type="date" id="sheetDate" min="${S.today}" value="${t.date && t.date >= S.today ? t.date : S.today}"></label>
       ${t.date ? '<button class="wide" data-sheet="undate">Убрать с дня<small>вернуть в запас</small></button>' : ""}
+      <button class="wide" data-sheet="urgencies">Срочность…<small>${t.pin === 1 ? "срочно (поставил сам)" : t.pin === -1 ? "может подождать (поставил сам)" : t.urgent ? "срочно (посчитано)" : "считается автоматически"}</small></button>
       <button class="wide" data-sheet="estimates">Время на задачу…<small>${t.est ? `сейчас ~${dur(t.est)}` : "оценки нет"}</small></button>
       <button class="wide" data-sheet="projects">В другой проект…<small>${t.project ? `сейчас: ${esc(t.project)}` : "сейчас без проекта"}</small></button>
       <button class="wide cancel" data-sheet="close">Отмена</button>
@@ -402,6 +405,22 @@ function openProjectSheet(num) {
     <div class="plist">${list.map((p) => `<button data-sheet="project" data-project="${p.num}" class="${p.name === t.project ? "on" : ""}">${esc(p.name)}${p.open ? `<small>задач: ${p.open}</small>` : ""}</button>`).join("")}
       ${t.project ? '<button data-sheet="project" data-project="">Без проекта</button>' : ""}</div>
     <div class="grid"><button class="wide cancel" data-sheet="close">Отмена</button></div>`;
+  $("sheet").dataset.num = num;
+  $("sheet").hidden = false;
+  $("veil").hidden = false;
+}
+
+/** Second page of the sheet: the person's own word on how pressing the task is. */
+function openUrgencySheet(num) {
+  const t = findTask(num);
+  if (!t) return;
+  const opt = (value, label, hint, on) => `<button class="wide ${on ? "on" : ""}" data-sheet="urgency" data-value="${value}">${label}<small>${hint}</small></button>`;
+  $("sheet").innerHTML = `<h3>${esc(t.title)}</h3>
+    <div class="grid">
+      ${opt("urgent", "Срочно", "наверх списка, с меткой", t.pin === 1)}
+      ${opt("later", "Может подождать", "вниз списка", t.pin === -1)}
+      ${opt("auto", "Авто", "по сроку, переносам и словам в задаче", !t.pin)}
+      <button class="wide cancel" data-sheet="close">Отмена</button></div>`;
   $("sheet").dataset.num = num;
   $("sheet").hidden = false;
   $("veil").hidden = false;
@@ -474,12 +493,14 @@ document.addEventListener("click", (e) => {
   const num = Number($("sheet").dataset.num);
   if (b.dataset.sheet === "projects") return openProjectSheet(num);
   if (b.dataset.sheet === "estimates") return openEstimateSheet(num);
+  if (b.dataset.sheet === "urgencies") return openUrgencySheet(num);
   if (b.dataset.sheet === "dial") {
     estDraft = Math.min(1440, Math.max(5, estDraft + Number(b.dataset.d)));
     tg?.HapticFeedback?.selectionChanged();
     return openEstimateSheet(num, true);
   }
   closeSheet();
+  if (b.dataset.sheet === "urgency") run({ op: "urgency", num, value: b.dataset.value });
   if (b.dataset.sheet === "estimate") run({ op: "estimate", num, minutes: Number(b.dataset.min) });
   if (b.dataset.sheet === "project") run({ op: "project", num, project: b.dataset.project ? Number(b.dataset.project) : null });
   if (b.dataset.sheet === "move") run({ op: "move", num, date: b.dataset.date });
