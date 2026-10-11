@@ -230,15 +230,18 @@ function tracksOf(name) {
 function projectList() {
   const by = new Map();
   for (const t of allTasks()) by.set(t.project ?? "", [...(by.get(t.project ?? "") ?? []), t]);
+  const horizon = S.days[S.days.length - 1].date;
   const names = new Set([...by.keys(), ...S.tracks.filter((t) => t.depth === 0 && t.project).map((t) => t.project)]);
   return [...names].map((name) => {
     const tasks = by.get(name) ?? [];
+    // Dated beyond the week in view: waiting for its date, not something to pick up now.
+    const wait = tasks.filter((t) => t.date && t.date > horizon), ready = tasks.filter((t) => !wait.includes(t));
     const dls = tasks.filter((t) => t.deadline).sort((a, b) => a.deadline.localeCompare(b.deadline));
     return {
-      name, tasks, min: tasks.reduce((s, t) => s + (t.est || 30), 0), today: tasks.filter((t) => t.date && t.date <= S.today).length,
+      name, tasks, ready, wait: wait.length, min: ready.reduce((s, t) => s + (t.est || 30), 0), today: tasks.filter((t) => t.date && t.date <= S.today).length,
       deadline: dls[0]?.deadlineLabel ?? null, tracks: tracksOf(name).length,
     };
-  }).sort((a, b) => (a.name === "" ? 1 : b.name === "" ? -1 : b.tasks.length - a.tasks.length));
+  }).sort((a, b) => (a.name === "" ? 1 : b.name === "" ? -1 : b.ready.length - a.ready.length || b.wait - a.wait));
 }
 
 function viewProjects() {
@@ -246,21 +249,22 @@ function viewProjects() {
   const list = projectList();
   if (!list.length) return '<p class="hint">Проектов с задачами пока нет.</p>';
   const title = (p) => esc(p.name || "Без проекта");
-  const count = (p) => `${p.tasks.length ? `~${dur(p.min)}` : "нет задач"}${p.tracks ? ` · направлений ${p.tracks}` : ""}`;
+  const load = (p) => [p.ready.length ? `~${dur(p.min)}` : p.wait ? "" : "нет задач", p.wait ? `ждут даты: ${p.wait}` : ""].filter(Boolean);
+  const count = (p) => `${load(p).join(" · ")}${p.tracks ? ` · направлений ${p.tracks}` : ""}`;
   const max = Math.max(...list.map((p) => p.min), 1);
   const body = {
     // A: a grid of cards, the number of tasks large.
     a: () => `<div class="pgrid">${list.map((p) => `<button class="pcard" style="--h:${hue(p.name)}" data-act="proj" data-name="${esc(p.name)}">
-        <b>${title(p)}</b><div class="n"><strong>${p.tasks.length}</strong>${p.tasks.length ? `~${dur(p.min)}` : "нет задач"}${p.deadline ? `<br><span class="dl">${esc(p.deadline)}</span>` : ""}</div></button>`).join("")}</div>`,
+        <b>${title(p)}</b><div class="n"><strong>${p.ready.length}</strong>${load(p).join("<br>")}${p.deadline ? `<br><span class="dl">${esc(p.deadline)}</span>` : ""}</div></button>`).join("")}</div>`,
     // B: rows with a bar of how heavy the project is next to the others, and what comes first in it.
     b: () => list.map((p) => `<button class="prow" style="--h:${hue(p.name)}" data-act="proj" data-name="${esc(p.name)}">
-        <div class="head"><b>${title(p)}</b><span>${p.tasks.length} · ${count(p)}</span></div>
+        <div class="head"><b>${title(p)}</b><span>${p.ready.length} · ${count(p)}</span></div>
         <div class="bar"><i style="width:${Math.round((p.min / max) * 100)}%"></i></div>
-        <p>${p.deadline ? `${esc(p.deadline)} · ` : ""}${p.tasks[0] ? esc(p.tasks[0].title) : "задач нет"}</p></button>`).join(""),
+        <p>${p.deadline ? `${esc(p.deadline)} · ` : ""}${p.ready[0] ? esc(p.ready[0].title) : "задач на сейчас нет"}</p></button>`).join(""),
     // C: big tiles with the first three tasks visible.
     c: () => list.map((p) => `<button class="ptile" style="--h:${hue(p.name)}" data-act="proj" data-name="${esc(p.name)}">
-        <div class="head"><b>${title(p)}</b><span>${p.tasks.length} · ${count(p)}</span></div>
-        <ul>${p.tasks.slice(0, 3).map((t) => `<li>${esc(t.title)}</li>`).join("")}</ul>
+        <div class="head"><b>${title(p)}</b><span>${p.ready.length} · ${count(p)}</span></div>
+        <ul>${p.ready.slice(0, 3).map((t) => `<li>${esc(t.title)}</li>`).join("")}</ul>
         ${p.deadline ? `<span class="dl">${esc(p.deadline)}</span>` : ""}</button>`).join(""),
   }[pview]();
   return `<p class="sum">Выбери проект, которым займёшься сейчас.</p>${body}
