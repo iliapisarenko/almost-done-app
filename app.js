@@ -63,6 +63,7 @@ function meta(t, { showDate = false } = {}) {
   const bits = [];
   // Only the most pressing tasks carry the word; the rest are simply higher or lower in the list.
   if (t.urgent) bits.push('<span class="hot">срочно</span>');
+  if (t.waiting) bits.push(`<span class="wait">жду: ${esc(t.waiting)}</span>`);
   if (t.slot) bits.push(`<span class="slot">${t.slot[0]}–${t.slot[1]}</span>`);
   else if (t.time) bits.push(`<span class="slot">${t.time}</span>`);
   if (t.est) bits.push(`~${dur(t.est)}`);
@@ -171,24 +172,34 @@ function viewBacklog() {
     ${S.someday.length ? `<h2>Когда-нибудь <span>· ${S.someday.length}</span></h2>${cardOf(S.someday.map((t) => taskRow(t, "someday")))}` : ""}`;
 }
 
+/** Remembered facts as an editable list: ✕ forgets one, the field below adds one. `project` = its number, "" = about the person. */
+function noteList(notes, project) {
+  return `<div class="card">${notes.map((n) => `<div class="mem note"><span>${esc(n.text)}</span><button data-act="note-del" data-num="${n.num}" aria-label="Забыть">✕</button></div>`).join("")}
+    <div class="mem note add"><input type="text" placeholder="Добавить факт…" data-note-for="${project}" enterkeyhint="done"><button data-act="note-add" aria-label="Добавить">＋</button></div></div>`;
+}
+
+const STAGE_RU = { idle: "на паузе", launch: "запуск", rhythm: "идёт" };
+const trackRow = (t) => `<button class="mem track tap" style="padding-left:${12 + t.depth * 16}px" data-act="track" data-num="${t.num}">
+  <div><b>${esc(t.title)}</b>${t.project ? ` <small>${esc(t.project)}</small>` : ""}<p>${esc(t.status)}${t.tasks ? ` · задач: ${t.tasks}` : ""}</p></div><span class="chev">›</span></button>`;
+
 function viewMemory() {
   const fixed = S.routines.filter((r) => r.kind === "fixed"), win = S.routines.filter((r) => r.kind === "window");
-  const rt = (r) => `<div class="mem"><b>${esc(r.title)}</b> <small>${r.start}–${r.end} · ${esc(r.days)}</small>${r.hint ? `<p>${esc(r.hint)}</p>` : ""}</div>`;
+  const rt = (r) => `<button class="mem tap" data-act="routine" data-num="${r.num}"><div><b>${esc(r.title)}</b> <small>${r.start}–${r.end} · ${esc(r.days)}${r.skips.length ? ` · кроме ${r.skips.map((d) => `${d.slice(8)}.${d.slice(5, 7)}`).join(", ")}` : ""}</small>${r.hint ? `<p>${esc(r.hint)}</p>` : ""}</div><span class="chev">›</span></button>`;
   const pr = S.projects.filter((p) => p.open || p.notes.length || p.about);
-  // Directions talk through the chat now; here they are one line that opens on demand.
-  const row = (t) => `<div class="mem track" style="padding-left:${12 + t.depth * 16}px"><div><b>${esc(t.title)}</b>${t.project ? ` <small>${esc(t.project)}</small>` : ""}<p>${esc(t.status)}${t.tasks ? ` · задач: ${t.tasks}` : ""}</p></div></div>`;
+  // Directions talk through the chat; here they are one line that opens on demand.
   const tracks = S.tracks.length
-    ? `<h2>Направления <span>· ${S.tracks.length}</span></h2>${showTracks ? `<div class="card">${S.tracks.map(row).join("")}</div>` : ""}
-       <button class="big ghost" data-act="tracks">${showTracks ? "Свернуть" : "Показать список"}</button>
-       <p class="sum">Планер сам иногда предложит шаг по тому, что давно стоит.</p>`
+    ? `<h2>Направления <span>· ${S.tracks.length}</span></h2>${showTracks ? `<div class="card">${S.tracks.map(trackRow).join("")}</div>` : ""}
+       <button class="big ghost" data-act="tracks">${showTracks ? "Свернуть" : "Показать и настроить"}</button>`
     : "";
-  return `${tracks}${fixed.length ? `<h2>Постоянное</h2><div class="card">${fixed.map(rt).join("")}</div>` : ""}
+  return `<h2>Расписание</h2>
+    ${fixed.length ? `<div class="card">${fixed.map(rt).join("")}</div>` : ""}
     ${win.length ? `<h2>Окна для дел</h2><div class="card">${win.map(rt).join("")}</div>` : ""}
-    ${!S.routines.length ? '<p class="sum">Расписания пока нет. Напиши внизу: «зал по вт и чт с 12 до 14», «днём с 12 до 17 дела».</p>' : ""}
-    ${S.about.length ? `<h2>Про тебя</h2><div class="card"><div class="mem"><ul>${S.about.map((n) => `<li>${esc(n)}</li>`).join("")}</ul></div></div>` : ""}
+    <button class="big ghost" data-act="routine" data-num="">＋ Добавить в расписание</button>
+    ${tracks}
+    <h2>Про тебя</h2>${noteList(S.about, "")}
     <h2>Проекты <span>· ${pr.length}</span></h2>
-    <div class="card">${pr.map((p) => `<div class="mem"><b>${esc(p.name)}</b> <small>${p.open ? `задач: ${p.open}` : ""}</small>${p.about ? `<p>${esc(p.about)}</p>` : ""}${p.notes.length ? `<ul>${p.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}</div>`).join("")}</div>
-    <p class="sum">Добавить: «сообщаю контекст по …». Убрать: «забудь …».</p>`;
+    <div class="card">${pr.map((p) => `<button class="mem tap" data-act="proj" data-name="${esc(p.name)}" data-gear="1"><div><b>${esc(p.name)}</b> <small>${[p.open ? `задач: ${p.open}` : "", p.notes.length ? `фактов: ${p.notes.length}` : ""].filter(Boolean).join(" · ")}</small>${p.about ? `<p>${esc(p.about)}</p>` : ""}</div><span class="chev">›</span></button>`).join("")}</div>
+    <p class="sum">Тап по проекту открывает его настройки: направления и то, что я о нём помню.</p>`;
 }
 
 // ---------- projects: pick one, work inside it ----------
@@ -261,20 +272,22 @@ function viewProject(name) {
   const info = S.projects.find((x) => x.name === name);
   const tasks = p?.tasks ?? [];
   const tracks = tracksOf(name);
+  // What is being launched comes first, as "what is left before it is live".
+  const launches = tracks.filter((t) => t.stage === "launch").map((t) => ({ t, left: (p?.tasks ?? []).filter((x) => x.parent === t.title) }));
+  const inLaunch = new Set(launches.flatMap((l) => l.left.map((x) => x.num)));
   const horizon = S.days[S.days.length - 1].date; // the week in view; beyond it a dated task is waiting, not planned
   const far = tasks.filter((t) => t.date && t.date > horizon);
-  const near = tasks.filter((t) => !far.includes(t));
+  const near = tasks.filter((t) => !far.includes(t) && !inLaunch.has(t.num));
   const dl = near.filter((t) => t.deadline), dated = near.filter((t) => !t.deadline && t.date), rest = near.filter((t) => !t.deadline && !t.date);
-  const settings = `${tracks.length ? `<h2>Направления</h2><div class="card">${tracks.map((t) => `<div class="mem track" style="padding-left:${12 + t.depth * 16}px">
-        <div><b>${esc(t.title)}</b><p>${esc(t.status)}${t.tasks ? ` · задач: ${t.tasks}` : ""}</p></div><button class="danger" data-act="close-track" data-num="${t.num}" data-title="${esc(t.title)}">Закрыть</button></div>`).join("")}</div>
-        <p class="sum">Добавить: «в ${esc(name)} направление …». Чаще или реже: «реддит раз в две недели».</p>` : '<p class="sum">Направлений нет. Добавить: «в ' + esc(name) + ' направление …».</p>'}
-    ${info?.notes?.length ? `<h2>Помню о проекте</h2><div class="card"><div class="mem"><ul>${info.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul></div></div>` : ""}
-    <p class="sum">Дополнить: «сообщаю контекст по ${esc(name)}: …».</p>`;
+  const settings = `<h2>Направления</h2>${tracks.length ? `<div class="card">${tracks.map(trackRow).join("")}</div>` : ""}
+    <p class="sum">Новое: напиши внизу «в ${esc(name || "…")} направление …». Тап по направлению: пауза, запуск, как часто.</p>
+    ${info ? `<h2>Помню о проекте</h2>${noteList(info.notes, info.num)}` : ""}`;
   return `<div class="phead"><button data-act="proj-back">‹ Проекты</button><h1>${esc(name || "Без проекта")}</h1>
       <button class="gear ${gear ? "on" : ""}" data-act="gear" aria-label="Настройки проекта">⚙</button></div>
     ${info?.about ? `<p class="pabout">${esc(info.about)}</p>` : ""}
     ${gear ? settings : `
     ${tasks.length && S.hasWindows ? `<button class="big" data-act="take" data-name="${esc(name)}">Взять в работу сегодня</button>` : ""}
+    ${launches.map((l) => `<h2>Запуск: ${esc(l.t.title)} <span>· ${l.left.length ? `осталось ${l.left.length}` : "шагов нет"}</span></h2>${l.left.length ? cardOf(l.left.map((t) => taskRow(t, "project"))) : '<p class="sum">Всё закрыто или шаги ещё не записаны. Запущено? Тап по шестерёнке → направление → «Идёт».</p>'}`).join("")}
     ${dl.length ? `<h2>Со сроком</h2>${cardOf(dl.map((t) => taskRow(t, "project")))}` : ""}
     ${dated.length ? `<h2>Стоят на днях</h2>${cardOf(dated.map((t) => taskRow(t, "project")))}` : ""}
     ${rest.length ? `<h2>Запас <span>· ${rest.length}</span></h2>${cardOf(rest.map((t) => taskRow(t, "project")))}` : ""}
@@ -303,8 +316,19 @@ document.addEventListener("click", (e) => {
   if (act === "hide") return void ($("toast").hidden = true);
   if (act === "undo") return void run({ op: "undo" });
   if (act === "redo") return void run({ op: "say", text: "отмени отмену" });
+  if (act === "note-del") return void run({ op: "note_del", num: Number(num) });
+  if (act === "note-add") {
+    const input = el.previousElementSibling;
+    const text = input?.value.trim();
+    if (!text) return void input?.focus();
+    return void run({ op: "note_add", text, project: input.dataset.noteFor ? Number(input.dataset.noteFor) : null });
+  }
+  if (act === "routine") return openRoutineSheet(num ? Number(num) : null);
+  if (act === "track") return openTrackSheet(Number(num));
   if (act === "proj") {
     proj = el.dataset.name;
+    gear = !!el.dataset.gear;
+    if (gear) tab = "projects";
     window.scrollTo(0, 0);
     return render();
   }
@@ -410,6 +434,64 @@ function openProjectSheet(num) {
   $("veil").hidden = false;
 }
 
+// ---------- editing the schedule and the directions ----------
+
+const DAYS = [["mon", "пн"], ["tue", "вт"], ["wed", "ср"], ["thu", "чт"], ["fri", "пт"], ["sat", "сб"], ["sun", "вс"]];
+let rdraft = null; // the routine being edited: { num, title, kind, days: Set, start, end, hint }
+
+const ruleToDays = (rule) => new Set(rule === "daily" ? DAYS.map((d) => d[0]) : rule === "weekdays" ? DAYS.slice(0, 5).map((d) => d[0]) : rule.slice(7).split(","));
+const daysToRule = (set) => {
+  const list = DAYS.map((d) => d[0]).filter((d) => set.has(d));
+  return list.length === 7 ? "daily" : list.join() === "mon,tue,wed,thu,fri" ? "weekdays" : list.length ? `weekly:${list.join(",")}` : null;
+};
+
+/** What is typed in the sheet goes into the draft before the sheet is redrawn or saved. */
+function readRoutineInputs() {
+  if (!rdraft || !$("rTitle")) return;
+  Object.assign(rdraft, { title: $("rTitle").value.trim(), start: $("rStart").value, end: $("rEnd").value, hint: $("rHint")?.value.trim() ?? rdraft.hint });
+}
+
+function openRoutineSheet(num, keep = false) {
+  if (!keep) {
+    const r = num ? S.routines.find((x) => x.num === num) : null;
+    rdraft = r ? { num, title: r.title, kind: r.kind, days: ruleToDays(r.rule), start: r.start, end: r.end, hint: r.hint ?? "" }
+      : { num: null, title: "", kind: "fixed", days: new Set(DAYS.map((d) => d[0])), start: "12:00", end: "13:00", hint: "" };
+  }
+  const d = rdraft;
+  $("sheet").innerHTML = `<h3>${d.num ? "Пункт расписания" : "Новый пункт расписания"}</h3>
+    <input class="field" id="rTitle" type="text" placeholder="Название: зал, съёмка, французский" value="${esc(d.title)}">
+    <div class="grid">
+      <button data-sheet="rkind" data-v="fixed" class="${d.kind === "fixed" ? "on" : ""}">Постоянное<small>стоит в календаре</small></button>
+      <button data-sheet="rkind" data-v="window" class="${d.kind === "window" ? "on" : ""}">Окно для дел<small>сюда встают задачи</small></button>
+    </div>
+    <div class="days">${DAYS.map(([k, l]) => `<button data-sheet="rday" data-v="${k}" class="${d.days.has(k) ? "on" : ""}">${l}</button>`).join("")}</div>
+    <div class="times"><label>с<input id="rStart" type="time" value="${d.start}"></label><label>до<input id="rEnd" type="time" value="${d.end}"></label></div>
+    ${d.kind === "window" ? `<input class="field" id="rHint" type="text" placeholder="Что сюда ставить: люди и созвоны, работа головой" value="${esc(d.hint)}">` : ""}
+    <div class="grid">
+      <button class="wide go" data-sheet="rsave">Сохранить</button>
+      ${d.num ? '<button class="wide danger" data-sheet="rdel">Убрать из расписания</button>' : ""}
+      <button class="wide cancel" data-sheet="close">Отмена</button></div>`;
+  $("sheet").dataset.num = d.num ?? "";
+  $("sheet").hidden = false;
+  $("veil").hidden = false;
+}
+
+function openTrackSheet(num) {
+  const t = S.tracks.find((x) => x.num === num);
+  if (!t) return;
+  const often = t.aim ? (t.aim >= 7 ? "каждый день" : t.aim === 1 ? "раз в неделю" : `${t.aim} ${t.aim < 5 ? "раза" : "раз"} в неделю`) : "не задано";
+  $("sheet").innerHTML = `<h3>${esc(t.title)}</h3><p class="note">${esc(t.status)}</p>
+    <div class="grid three">${["rhythm", "launch", "idle"].map((st) => `<button data-sheet="tstage" data-v="${st}" class="${t.stage === st ? "on" : ""}">${st === "rhythm" ? "Идёт" : st === "launch" ? "Запуск" : "Пауза"}</button>`).join("")}</div>
+    <div class="dial"><button data-sheet="trh" data-v="${Math.max(0, (t.aim ?? 0) - 1)}">−</button><b>${often}</b><button data-sheet="trh" data-v="${Math.min(7, (t.aim ?? 0) + 1)}">+</button></div>
+    <p class="note">На паузе планер о направлении молчит. В запуске ведёт по шагам и напоминает чаще. «Идёт»: предлагает шаг, когда давно не было движения.</p>
+    <div class="grid">
+      <button class="wide danger" data-sheet="tclose" data-title="${esc(t.title)}">Закрыть направление</button>
+      <button class="wide cancel" data-sheet="close">Отмена</button></div>`;
+  $("sheet").dataset.num = num;
+  $("sheet").hidden = false;
+  $("veil").hidden = false;
+}
+
 /** Second page of the sheet: the person's own word on how pressing the task is. */
 function openUrgencySheet(num) {
   const t = findTask(num);
@@ -491,6 +573,24 @@ document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-sheet]");
   if (!b) return;
   const num = Number($("sheet").dataset.num);
+  // The schedule sheet keeps open while it is being filled in.
+  if (b.dataset.sheet === "rkind" || b.dataset.sheet === "rday") {
+    readRoutineInputs();
+    if (b.dataset.sheet === "rkind") rdraft.kind = b.dataset.v;
+    else rdraft.days.has(b.dataset.v) ? rdraft.days.delete(b.dataset.v) : rdraft.days.add(b.dataset.v);
+    return openRoutineSheet(rdraft.num, true);
+  }
+  if (b.dataset.sheet === "rsave") {
+    readRoutineInputs();
+    const days = daysToRule(rdraft.days);
+    if (!rdraft.title || !days || !rdraft.start || !rdraft.end) return toast("Нужны название, хотя бы один день и время.");
+    closeSheet();
+    return void run({ op: "routine_set", num: rdraft.num, title: rdraft.title, kind: rdraft.kind, days, start: rdraft.start, end: rdraft.end, hint: rdraft.kind === "window" ? rdraft.hint : "" });
+  }
+  if (b.dataset.sheet === "rdel") { closeSheet(); return void run({ op: "routine_del", num }); }
+  if (b.dataset.sheet === "tstage") { closeSheet(); return void run({ op: "track_set", num, stage: b.dataset.v, rhythm: null }); }
+  if (b.dataset.sheet === "trh") { closeSheet(); return void run({ op: "track_set", num, stage: "keep", rhythm: Number(b.dataset.v) }); }
+  if (b.dataset.sheet === "tclose") { closeSheet(); return void run({ op: "say", text: `закрой направление ${num} «${b.dataset.title}»` }); }
   if (b.dataset.sheet === "projects") return openProjectSheet(num);
   if (b.dataset.sheet === "estimates") return openEstimateSheet(num);
   if (b.dataset.sheet === "urgencies") return openUrgencySheet(num);

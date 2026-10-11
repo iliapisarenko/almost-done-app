@@ -171,3 +171,25 @@ h2.sep { margin-top: 26px; }
 .mem.track button.danger { color: #d0443e; }
 
 .meta .hot { color: #fff; background: #d0443e; border-radius: 6px; padding: 0 6px; font-weight: 700; font-size: 11.5px; line-height: 1.5; }
+
+/* editing what is remembered, the schedule and the directions */
+.mem.tap { display: flex; width: 100%; text-align: left; align-items: center; justify-content: space-between; gap: 8px; }
+.mem .chev { flex: 0 0 auto; color: var(--muted); font-size: 20px; }
+.mem.note { display: flex; align-items: flex-start; gap: 8px; }
+.mem.note span { flex: 1; font-size: 14px; overflow-wrap: anywhere; }
+.mem.note button { flex: 0 0 30px; height: 30px; border-radius: 50%; background: var(--bg); color: var(--muted); font-size: 14px; }
+.mem.note.add input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 14px; padding: 5px 0; }
+.mem.note.add button { color: var(--accent); font-size: 18px; }
+.sheet .field { display: block; width: 100%; border: 0; outline: 0; background: var(--card); color: var(--text); border-radius: 12px; padding: 12px 14px; font: inherit; margin-bottom: 8px; }
+.sheet .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin: 8px 0; }
+.sheet .days button { padding: 10px 0; font-size: 14px; }
+.sheet .days button.on, .sheet .grid button.on { background: var(--accent); color: var(--on-accent); box-shadow: none; }
+.sheet .grid button.on small { color: var(--on-accent); opacity: .85; }
+.sheet .times { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.sheet .times label { display: flex; align-items: center; gap: 8px; background: var(--card); border-radius: 12px; padding: 8px 12px; text-align: left; font-weight: 500; color: var(--muted); }
+.sheet .times input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-weight: 600; }
+.sheet .danger { color: #d0443e; }
+.sheet p.note { margin: 0 4px 10px; }
+.meta .wait { color: var(--muted); font-style: italic; }
+/* (the invisible full-tile input is for the date tile only; time fields are ordinary visible inputs) */
+.sheet .times input { position: static; inset: auto; width: auto; height: auto; opacity: 1; }
