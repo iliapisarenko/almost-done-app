@@ -164,3 +164,8 @@ h2.sep { margin-top: 26px; }
 
 /* The menu has grown: on a short screen it scrolls instead of running off the top. */
 .sheet { max-height: 86vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+.phead h1 { flex: 1; }
+.phead .gear { flex: 0 0 auto; width: 38px; height: 38px; padding: 0; font-size: 18px; border-radius: 50%; }
+.phead .gear.on { background: var(--accent); color: var(--on-accent); }
+.mem.track button.danger { color: #d0443e; }

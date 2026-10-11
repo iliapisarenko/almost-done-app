@@ -142,12 +142,21 @@ function viewWeek() {
   const done = [...byDay].map(([label, ts]) => `<h2>${esc(label)} <span>· ${ts.length}</span></h2><div class="card">${ts.map((t) =>
     `<div class="row done"><span class="check">${TICK}</span><div class="body"><div class="title">${esc(t.title)}</div>${t.project ? `<div class="meta"><span>${esc(t.project)}</span></div>` : ""}</div><button class="back" data-act="op" data-op="reopen" data-num="${t.num}">Вернуть</button></div>`).join("")}</div>`).join("");
   return `<p class="sum">Полоска показывает, сколько времени под дела в этом дне уже занято задачами. Оранжевая: не влезает.</p>${days}
-    ${S.later.length ? `<h2>Дальше недели</h2>${cardOf(S.later.map((t) => taskRow(t, "later")))}` : ""}
+    ${waiting(S.later)}
     ${S.done.length ? `<h2 class="sep">Сделано за две недели <span>· ${S.done.length}</span></h2>${done}` : ""}`;
 }
 
+/** Tasks that cannot be started before their date: out of the way, one line that opens. */
+let showLater = false;
+function waiting(tasks) {
+  if (!tasks.length) return "";
+  const sorted = [...tasks].sort((a, b) => a.date.localeCompare(b.date));
+  return `<h2>Ждут своей даты <span>· ${tasks.length}</span></h2>${showLater ? cardOf(sorted.map((t) => taskRow(t, "later"))) : ""}
+    <button class="big ghost" data-act="later">${showLater ? "Свернуть" : `Показать (ближайшая ${sorted[0].date.slice(8)}.${sorted[0].date.slice(5, 7)})`}</button>`;
+}
+
 function viewBacklog() {
-  if (!S.backlog.length && !S.someday.length) return '<p class="hint">Запас пуст: всё либо стоит на днях, либо сделано.</p>';
+  if (!S.backlog.length && !S.someday.length && !S.later.length) return '<p class="hint">Запас пуст: всё либо стоит на днях, либо сделано.</p>';
   const groups = new Map();
   for (const t of S.backlog) groups.set(t.project ?? "", [...(groups.get(t.project ?? "") ?? []), t]);
   const urgent = S.backlog.filter((t) => t.deadline);
@@ -156,6 +165,7 @@ function viewBacklog() {
   return `${S.backlog.length ? `<p class="sum">Без дня: ${S.backlog.length}, примерно ${dur(total)} работы. Это ${Math.max(1, Math.round(total / 240))} дн. твоих окон, не бесконечность.</p>` : ""}
     ${urgent.length ? `<h2>Со сроком</h2>${cardOf(urgent.map((t) => taskRow(t, "backlog")))}` : ""}
     ${order.map((p) => `<h2>${p ? esc(p) : "Без проекта"} <span>· ${groups.get(p).filter((t) => !t.deadline).length}</span></h2>${cardOf(groups.get(p).filter((t) => !t.deadline).map((t) => taskRow(t, "backlog")))}`).join("")}
+    ${waiting(S.later)}
     ${S.someday.length ? `<h2>Когда-нибудь <span>· ${S.someday.length}</span></h2>${cardOf(S.someday.map((t) => taskRow(t, "someday")))}` : ""}`;
 }
 
@@ -163,11 +173,13 @@ function viewMemory() {
   const fixed = S.routines.filter((r) => r.kind === "fixed"), win = S.routines.filter((r) => r.kind === "window");
   const rt = (r) => `<div class="mem"><b>${esc(r.title)}</b> <small>${r.start}–${r.end} · ${esc(r.days)}</small>${r.hint ? `<p>${esc(r.hint)}</p>` : ""}</div>`;
   const pr = S.projects.filter((p) => p.open || p.notes.length || p.about);
+  // Directions talk through the chat now; here they are one line that opens on demand.
+  const row = (t) => `<div class="mem track" style="padding-left:${12 + t.depth * 16}px"><div><b>${esc(t.title)}</b>${t.project ? ` <small>${esc(t.project)}</small>` : ""}<p>${esc(t.status)}${t.tasks ? ` · задач: ${t.tasks}` : ""}</p></div></div>`;
   const tracks = S.tracks.length
-    ? `<h2>Направления</h2><div class="card">${S.tracks.map((t) => `<div class="mem track" style="padding-left:${12 + t.depth * 16}px">
-        <div><b>${esc(t.title)}</b>${t.project ? ` <small>${esc(t.project)}</small>` : ""}<p>${esc(t.status)}${t.tasks ? ` · задач: ${t.tasks}` : ""}</p></div>
-        <button data-act="op" data-op="session" data-num="${t.num}">Подход</button></div>`).join("")}</div>`
-    : '<h2>Направления</h2><p class="sum">То, чем занимаешься постоянно, без конечной точки. Напиши внизу: «английский это направление, хочу три раза в неделю».</p>';
+    ? `<h2>Направления <span>· ${S.tracks.length}</span></h2>${showTracks ? `<div class="card">${S.tracks.map(row).join("")}</div>` : ""}
+       <button class="big ghost" data-act="tracks">${showTracks ? "Свернуть" : "Показать список"}</button>
+       <p class="sum">Планер сам иногда предложит шаг по тому, что давно стоит.</p>`
+    : "";
   return `${tracks}${fixed.length ? `<h2>Постоянное</h2><div class="card">${fixed.map(rt).join("")}</div>` : ""}
     ${win.length ? `<h2>Окна для дел</h2><div class="card">${win.map(rt).join("")}</div>` : ""}
     ${!S.routines.length ? '<p class="sum">Расписания пока нет. Напиши внизу: «зал по вт и чт с 12 до 14», «днём с 12 до 17 дела».</p>' : ""}
@@ -179,6 +191,8 @@ function viewMemory() {
 
 // ---------- projects: pick one, work inside it ----------
 
+let showTracks = false; // the full list of directions in «Память» is folded by default
+let gear = false; // settings of the open project (its directions and what is remembered)
 let proj = null; // name of the open project ("" = tasks without a project), null = the picker
 let pview = "a";
 try { pview = localStorage.getItem("pview") || "a"; } catch (_) { /* private mode: the default stays */ }
@@ -245,17 +259,25 @@ function viewProject(name) {
   const info = S.projects.find((x) => x.name === name);
   const tasks = p?.tasks ?? [];
   const tracks = tracksOf(name);
-  const dl = tasks.filter((t) => t.deadline), dated = tasks.filter((t) => !t.deadline && t.date), rest = tasks.filter((t) => !t.deadline && !t.date);
-  return `<div class="phead"><button data-act="proj-back">‹ Проекты</button><h1>${esc(name || "Без проекта")}</h1></div>
+  const horizon = S.days[S.days.length - 1].date; // the week in view; beyond it a dated task is waiting, not planned
+  const far = tasks.filter((t) => t.date && t.date > horizon);
+  const near = tasks.filter((t) => !far.includes(t));
+  const dl = near.filter((t) => t.deadline), dated = near.filter((t) => !t.deadline && t.date), rest = near.filter((t) => !t.deadline && !t.date);
+  const settings = `${tracks.length ? `<h2>Направления</h2><div class="card">${tracks.map((t) => `<div class="mem track" style="padding-left:${12 + t.depth * 16}px">
+        <div><b>${esc(t.title)}</b><p>${esc(t.status)}${t.tasks ? ` · задач: ${t.tasks}` : ""}</p></div><button class="danger" data-act="close-track" data-num="${t.num}" data-title="${esc(t.title)}">Закрыть</button></div>`).join("")}</div>
+        <p class="sum">Добавить: «в ${esc(name)} направление …». Чаще или реже: «реддит раз в две недели».</p>` : '<p class="sum">Направлений нет. Добавить: «в ' + esc(name) + ' направление …».</p>'}
+    ${info?.notes?.length ? `<h2>Помню о проекте</h2><div class="card"><div class="mem"><ul>${info.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul></div></div>` : ""}
+    <p class="sum">Дополнить: «сообщаю контекст по ${esc(name)}: …».</p>`;
+  return `<div class="phead"><button data-act="proj-back">‹ Проекты</button><h1>${esc(name || "Без проекта")}</h1>
+      <button class="gear ${gear ? "on" : ""}" data-act="gear" aria-label="Настройки проекта">⚙</button></div>
     ${info?.about ? `<p class="pabout">${esc(info.about)}</p>` : ""}
+    ${gear ? settings : `
     ${tasks.length && S.hasWindows ? `<button class="big" data-act="take" data-name="${esc(name)}">Взять в работу сегодня</button>` : ""}
-    ${tracks.length ? `<h2>Направления</h2><div class="card">${tracks.map((t) => `<div class="mem track" style="padding-left:${12 + t.depth * 16}px">
-        <div><b>${esc(t.title)}</b><p>${esc(t.status)}${t.tasks ? ` · задач: ${t.tasks}` : ""}</p></div><button data-act="op" data-op="session" data-num="${t.num}">Подход</button></div>`).join("")}</div>` : ""}
     ${dl.length ? `<h2>Со сроком</h2>${cardOf(dl.map((t) => taskRow(t, "project")))}` : ""}
     ${dated.length ? `<h2>Стоят на днях</h2>${cardOf(dated.map((t) => taskRow(t, "project")))}` : ""}
     ${rest.length ? `<h2>Запас <span>· ${rest.length}</span></h2>${cardOf(rest.map((t) => taskRow(t, "project")))}` : ""}
-    ${!tasks.length ? '<p class="hint">Открытых задач нет. Добавь внизу: «' + esc(name) + ': …».</p>' : ""}
-    ${info?.notes?.length ? `<h2>Помню</h2><div class="card"><div class="mem"><ul>${info.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul></div></div>` : ""}`;
+    ${waiting(far)}
+    ${!tasks.length ? '<p class="hint">Открытых задач нет. Добавь внизу: «' + esc(name) + ': …».</p>' : ""}`}`;
 }
 
 function render() {
@@ -284,8 +306,22 @@ document.addEventListener("click", (e) => {
     window.scrollTo(0, 0);
     return render();
   }
+  if (act === "later") {
+    showLater = !showLater;
+    return render();
+  }
+  if (act === "tracks") {
+    showTracks = !showTracks;
+    return render();
+  }
+  if (act === "gear") {
+    gear = !gear;
+    return render();
+  }
+  if (act === "close-track") return void run({ op: "say", text: `закрой направление ${num} «${el.dataset.title}»` });
   if (act === "proj-back") {
     proj = null;
+    gear = false;
     return render();
   }
   if (act === "pview") {
