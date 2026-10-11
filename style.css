@@ -193,3 +193,5 @@ h2.sep { margin-top: 26px; }
 .meta .wait { color: var(--muted); font-style: italic; }
 /* (the invisible full-tile input is for the date tile only; time fields are ordinary visible inputs) */
 .sheet .times input { position: static; inset: auto; width: auto; height: auto; opacity: 1; }
+
+.sheet .dial button:disabled { opacity: .3; }

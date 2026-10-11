@@ -482,7 +482,7 @@ function openTrackSheet(num) {
   const often = t.aim ? (t.aim >= 7 ? "каждый день" : t.aim === 1 ? "раз в неделю" : `${t.aim} ${t.aim < 5 ? "раза" : "раз"} в неделю`) : "не задано";
   $("sheet").innerHTML = `<h3>${esc(t.title)}</h3><p class="note">${esc(t.status)}</p>
     <div class="grid three">${["rhythm", "launch", "idle"].map((st) => `<button data-sheet="tstage" data-v="${st}" class="${t.stage === st ? "on" : ""}">${st === "rhythm" ? "Идёт" : st === "launch" ? "Запуск" : "Пауза"}</button>`).join("")}</div>
-    <div class="dial"><button data-sheet="trh" data-v="${Math.max(0, (t.aim ?? 0) - 1)}">−</button><b>${often}</b><button data-sheet="trh" data-v="${Math.min(7, (t.aim ?? 0) + 1)}">+</button></div>
+    <div class="dial"><button data-sheet="trh" data-v="${Math.max(1, (t.aim ?? 1) - 1)}" ${t.aim && t.aim > 1 ? "" : "disabled"}>−</button><b>${often}</b><button data-sheet="trh" data-v="${Math.min(7, (t.aim ?? 0) + 1)}">+</button></div>
     <p class="note">На паузе планер о направлении молчит. В запуске ведёт по шагам и напоминает чаще. «Идёт»: предлагает шаг, когда давно не было движения.</p>
     <div class="grid">
       <button class="wide danger" data-sheet="tclose" data-title="${esc(t.title)}">Закрыть направление</button>
