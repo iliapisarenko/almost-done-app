@@ -350,10 +350,89 @@ function viewProject(name) {
     ${!tasks.length ? '<p class="hint">Открытых задач нет. Добавь внизу: «' + esc(name) + ': …».</p>' : ""}`}`;
 }
 
+// ---------- overview (browser only): four weeks of work at a glance ----------
+
+const WD = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+const shortDay = (d) => { const x = new Date(`${d}T12:00:00Z`); return `${WD[x.getUTCDay()]} ${x.getUTCDate()}.${String(x.getUTCMonth() + 1).padStart(2, "0")}`; };
+const addD = (d, n) => new Date(Date.parse(`${d}T12:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
+const hours = (m) => (m >= 60 ? `${Math.round(m / 6) / 10} ч`.replace(".", ",") : `${m} мин`);
+
+function viewStats() {
+  if (!S.stats) return '<p class="hint">Обнови страницу: нужна свежая версия планера.</p>';
+  const { days, projects } = S.stats;
+  const last7 = days.slice(-7), last14 = days.slice(-14);
+  const sum = (xs, k) => xs.reduce((s, d) => s + d[k], 0);
+  // Days in a row with something closed, counting back from today (today may still be empty: then from yesterday).
+  let streak = 0;
+  for (let i = days.length - 1 - (days.at(-1).closed ? 0 : 1); i >= 0 && days[i].closed; i--) streak++;
+  const net = sum(last14, "created") - sum(last14, "closed");
+  const tiles = `<div class="tiles">
+      <div class="tile"><b>${sum(last7, "closed")}</b><span>закрыто за 7 дней</span><small>около ${hours(sum(last7, "minutes"))} работы</small></div>
+      <div class="tile"><b>${streak}</b><span>${streak === 1 ? "день" : streak > 1 && streak < 5 ? "дня" : "дней"} подряд</span><small>с хотя бы одним закрытым делом</small></div>
+      <div class="tile"><b>${net > 0 ? "+" : ""}${net}</b><span>запас за 14 дней</span><small>пришло ${sum(last14, "created")}, закрыто ${sum(last14, "closed")}</small></div>
+    </div>`;
+
+  // Heatmap: weeks as rows from Monday, the minutes of the day as one blue from light to dark.
+  const step = (m) => (m <= 0 ? 0 : m <= 60 ? 1 : m <= 120 ? 2 : m <= 240 ? 3 : m <= 360 ? 4 : 5);
+  const byDate = new Map(days.map((d) => [d.date, d]));
+  const lead = (new Date(`${days[0].date}T12:00:00Z`).getUTCDay() + 6) % 7;
+  const cells = [];
+  for (let i = -lead; i < days.length || (i + lead) % 7; i++) {
+    const date = addD(days[0].date, i), d = byDate.get(date);
+    if (!d || date > S.today) { cells.push('<span class="hm none"></span>'); continue; }
+    const tip = `${shortDay(date)} · закрыто ${d.closed}${d.minutes ? ` · ~${hours(d.minutes)}` : ""}`;
+    cells.push(`<span class="hm s${step(d.minutes)}${date === S.today ? " today" : ""}" data-tip="${esc(tip)}"></span>`);
+  }
+  const heat = `<section class="viz"><h2>Четыре недели <span>· время на закрытые дела по дням</span></h2>
+      <div class="hmgrid">${["пн", "вт", "ср", "чт", "пт", "сб", "вс"].map((w) => `<i>${w}</i>`).join("")}${cells.join("")}</div>
+      <div class="hmkey">меньше ${[0, 1, 2, 3, 4, 5].map((s) => `<span class="hm s${s}"></span>`).join("")} больше <span class="muted">· шаги: до 1 ч, 2 ч, 4 ч, 6 ч, больше</span></div>
+    </section>`;
+
+  // Where the time went: this week as bars, last week as a tick on the same scale.
+  const top = projects.slice(0, 8), rest = projects.slice(8);
+  if (rest.length) top.push({ name: "Остальное", week: sum(rest, "week"), prev: sum(rest, "prev") });
+  const pmax = Math.max(1, ...top.map((p) => Math.max(p.week, p.prev)));
+  const bars = top.length ? top.map((p) => `<div class="pbar" data-tip="${esc(`${p.name || "Без проекта"}: эта неделя ~${hours(p.week)}, прошлая ~${hours(p.prev)}`)}">
+      <span class="pname">${esc(p.name || "Без проекта")}</span>
+      <span class="ptrack"><i style="width:${(p.week / pmax) * 100}%"></i>${p.prev ? `<em style="left:${(p.prev / pmax) * 100}%"></em>` : ""}</span>
+      <span class="pval">${p.week ? `~${hours(p.week)}` : "—"}</span></div>`).join("")
+    : '<p class="hint">Пока нечего показать.</p>';
+  const time = `<section class="viz"><h2>Куда ушло время <span>· последние 7 дней по проектам</span></h2>${bars}
+      <div class="vkey"><span><i class="sw week"></i>эти 7 дней</span><span><i class="sw prev"></i>7 дней до них</span></div></section>`;
+
+  // Inflow and outflow: new tasks above the line, closed below. More above than below means the pile grows.
+  const fmax = Math.max(1, ...last14.map((d) => Math.max(d.created, d.closed)));
+  const cols = last14.map((d) => `<div class="fcol${d.date === S.today ? " today" : ""}" data-tip="${esc(`${shortDay(d.date)}: пришло ${d.created}, закрыто ${d.closed}`)}">
+      <div class="up"><i style="height:${(d.created / fmax) * 100}%"></i></div>
+      <div class="down"><i style="height:${(d.closed / fmax) * 100}%"></i></div>
+      <small>${new Date(`${d.date}T12:00:00Z`).getUTCDate()}</small></div>`).join("");
+  const flow = `<section class="viz"><h2>Приток и отток <span>· две недели, задачи в штуках</span></h2>
+      <div class="flow">${cols}</div>
+      <div class="vkey"><span><i class="sw created"></i>пришло новых (вверх)</span><span><i class="sw closed"></i>закрыто (вниз)</span></div>
+      <p class="sum">${net > 0 ? `За две недели пришло на ${net} больше, чем закрыто: запас растёт.` : net < 0 ? `За две недели закрыто на ${-net} больше, чем пришло: запас тает.` : "За две недели пришло столько же, сколько закрыто."}</p></section>`;
+
+  return `<div class="stats">${tiles}${heat}<div class="vrow">${time}${flow}</div></div>`;
+}
+
+// One tooltip for every chart mark that carries data-tip.
+const vtip = Object.assign(document.createElement("div"), { className: "vtip", hidden: true });
+document.body.append(vtip);
+document.addEventListener("mouseover", (e) => {
+  const el = e.target.closest?.("[data-tip]");
+  if (!el) return void (vtip.hidden = true);
+  vtip.textContent = el.dataset.tip;
+  vtip.hidden = false;
+});
+document.addEventListener("mousemove", (e) => {
+  if (vtip.hidden) return;
+  const x = Math.min(e.clientX + 14, innerWidth - vtip.offsetWidth - 8);
+  vtip.style.transform = `translate(${x}px, ${e.clientY + 16}px)`;
+});
+
 function render() {
   if (!S) return;
   document.querySelectorAll("#seg button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
-  $("view").innerHTML = { day: viewDay, week: viewWeek, projects: viewProjects, backlog: viewBacklog, memory: viewMemory }[tab]();
+  $("view").innerHTML = { day: viewDay, week: viewWeek, projects: viewProjects, backlog: viewBacklog, memory: viewMemory, stats: viewStats }[tab]();
 }
 
 // ---------- events ----------
