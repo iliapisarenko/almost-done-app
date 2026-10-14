@@ -9,6 +9,18 @@
   --warn: #d9822b;
   --ok: #2e9e5b;
 }
+/* In a browser there is no Telegram theme: follow the system's light or dark. */
+@media (prefers-color-scheme: dark) {
+  html.web { --bg: #17181a; --card: #232427; --text: #ececee; --muted: #8e9198; --accent: #4b8df8; }
+}
+/* A wide window: the phone column in the middle instead of lines across the whole screen. */
+html.web main, html.web .top { max-width: 760px; margin-left: auto; margin-right: auto; }
+html.web .say { padding-left: max(10px, calc(50vw - 370px)); padding-right: max(10px, calc(50vw - 370px)); }
+html.web .toast { left: max(10px, calc(50vw - 370px)); right: max(10px, calc(50vw - 370px)); }
+html.web .sheet { max-width: 760px; margin: 0 auto; }
+.keyform { display: flex; gap: 8px; max-width: 520px; margin: 0 auto; padding: 0 12px; }
+.keyform input { flex: 1; min-width: 0; border: 0; outline: 0; background: var(--card); color: var(--text); border-radius: 10px; padding: 10px 12px; font: inherit; }
+.keyform button { background: var(--accent); color: var(--on-accent); border-radius: 10px; padding: 0 16px; font-weight: 600; }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; background: var(--bg); color: var(--text); }
 body { font: 15px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif; padding-bottom: calc(76px + env(safe-area-inset-bottom)); }

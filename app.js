@@ -1,9 +1,45 @@
 // Mini-app of the planner: the day by the clock, the week's load, the backlog by project, what is remembered.
-// Static page; every call goes to the API with Telegram initData, which the server verifies.
+// Static page; every call goes to the API with Telegram initData or, in an ordinary browser, the personal key
+// from the bot's /web command. The server checks either.
 const API = "https://vuaywrqnbtubsekefxcv.supabase.co/functions/v1/planner-app";
 const tg = window.Telegram?.WebApp;
 tg?.ready();
 tg?.expand();
+
+// Outside Telegram (Safari, a Dock app) initData is empty: the key from the /web link signs the requests instead.
+// It comes after «#», so the page host never sees it; it is kept on this device and taken out of the address bar.
+const inTelegram = !!tg?.initData;
+const KEY_STORE = "almost-done-web-key";
+let webKey = null;
+let keyKept = false; // false when the browser would not store it (a private window): then a reload must not drop it
+if (!inTelegram) {
+  document.documentElement.classList.add("web");
+  const fromLink = /(?:^#|&)k=([A-Za-z0-9_-]{40,64})/.exec(location.hash)?.[1];
+  try {
+    if (fromLink) localStorage.setItem(KEY_STORE, fromLink);
+    webKey = localStorage.getItem(KEY_STORE);
+    keyKept = !!webKey;
+  } catch (_) { /* private window: the key from the link still works for this visit */ }
+  webKey ??= fromLink ?? null;
+  if (fromLink) history.replaceState(null, "", location.pathname + location.search);
+}
+// A Dock app (and a Home Screen one) starts with its own empty storage and never sees the link's «#k=»:
+// so the key can also be pasted here, the whole link or the key alone.
+function needKey(why) {
+  try { localStorage.removeItem(KEY_STORE); } catch (_) {}
+  webKey = null;
+  $("view").innerHTML = `<p class="hint">${esc(why)}<br><br>Напиши боту <b>/web</b>, скопируй ссылку из ответа и вставь сюда.</p>
+    <form class="keyform" id="keyForm"><input id="keyInput" type="text" autocomplete="off" placeholder="Ссылка из /web" aria-label="Ссылка из /web"><button type="submit">Войти</button></form>`;
+  $("keyForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const key = /(?:k=)?([A-Za-z0-9_-]{40,64})\s*$/.exec($("keyInput").value.trim())?.[1];
+    if (!key) return toast("Не вижу ключа. Вставь ссылку из ответа на /web целиком.");
+    webKey = key;
+    try { localStorage.setItem(KEY_STORE, key); keyKept = true; } catch (_) {}
+    $("view").innerHTML = '<p class="hint">Загружаю…</p>';
+    run({ op: "state" }, { quiet: true });
+  });
+}
 
 let S = null; // server state
 let tab = "day";
@@ -21,10 +57,14 @@ const TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
 async function call(body) {
   const res = await fetch(API, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-telegram-init-data": tg?.initData ?? "" },
+    headers: { "content-type": "application/json", ...(inTelegram ? { "x-telegram-init-data": tg.initData } : webKey ? { "x-web-key": webKey } : {}) },
     body: JSON.stringify(body),
   });
   const json = await res.json().catch(() => ({}));
+  if (res.status === 401 && !inTelegram) {
+    needKey("Ссылка больше не действует.");
+    throw new Error("Нужна новая ссылка: /web в чате с ботом.");
+  }
   if (!res.ok) throw new Error(json.error === "unauthorized" ? "Открой мини-апп из чата с ботом." : json.error || "Не получилось, попробуй ещё раз.");
   return json;
 }
@@ -576,8 +616,16 @@ document.addEventListener("pointermove", (e) => {
   if (hold && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 10) dropHold();
 });
 for (const ev of ["pointerup", "pointercancel", "scroll"]) document.addEventListener(ev, dropHold, true);
+// With a mouse a right click opens the same menu as holding a finger on the task.
+const MOUSE = matchMedia("(pointer: fine)").matches;
 document.addEventListener("contextmenu", (e) => {
-  if (e.target.closest(".row.task")) e.preventDefault();
+  const row = e.target.closest(".row.task");
+  if (!row) return;
+  e.preventDefault();
+  if (MOUSE && S && $("sheet").hidden && !e.target.closest(".check, .more")) {
+    dropHold();
+    openSheet(Number(row.dataset.num));
+  }
 });
 document.addEventListener("click", (e) => {
   if (swallowClick) {
@@ -649,8 +697,11 @@ const BUILD = (document.currentScript?.src.match(/v=(\d+)/) ?? [])[1];
   try {
     const html = await (await fetch(`${location.pathname}?t=${Date.now()}`, { cache: "no-store" })).text();
     const latest = (html.match(/app\.js\?v=(\d+)/) ?? [])[1];
+    // A key this browser would not store lives only in memory: reloading would lose it.
+    if (!inTelegram && webKey && !keyKept) return;
     if (BUILD && latest && latest !== BUILD && !location.search.includes(`b=${latest}`)) location.replace(`${location.pathname}?b=${latest}${location.hash}`);
   } catch (_) { /* offline or blocked: the build at hand still works */ }
 })();
 
-run({ op: "state" }, { quiet: true });
+if (!inTelegram && !webKey) needKey("Здесь планер открывается по личной ссылке.");
+else run({ op: "state" }, { quiet: true });
