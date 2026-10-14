@@ -368,7 +368,7 @@ function viewStats() {
   const net = sum(last14, "created") - sum(last14, "closed");
   const tiles = `<div class="tiles">
       <div class="tile"><b>${sum(last7, "closed")}</b><span>закрыто за 7 дней</span><small>около ${hours(sum(last7, "minutes"))} работы</small></div>
-      <div class="tile"><b>${streak}</b><span>${streak === 1 ? "день" : streak > 1 && streak < 5 ? "дня" : "дней"} подряд</span><small>с хотя бы одним закрытым делом</small></div>
+      <div class="tile"><b>${streak}${streak >= days.length ? "+" : ""}</b><span>${streak === 1 ? "день" : streak > 1 && streak < 5 ? "дня" : "дней"} подряд</span><small>с хотя бы одним закрытым делом${streak >= days.length ? ", считаю за 4 недели" : ""}</small></div>
       <div class="tile"><b>${net > 0 ? "+" : ""}${net}</b><span>запас за 14 дней</span><small>пришло ${sum(last14, "created")}, закрыто ${sum(last14, "closed")}</small></div>
     </div>`;
 
