@@ -462,7 +462,8 @@ function openSheet(num) {
   const quick = [0, 1, 2, 3].map((i) => `<button data-sheet="move" data-date="${day(i).date}">${esc(day(i).label)}${day(i).label === day(i).sub ? "" : `<small>${esc(day(i).sub)}</small>`}</button>`).join("");
   $("sheet").innerHTML = `<h3>${esc(t.title)}</h3>
     <div class="grid">${quick}
-      <label class="wide">На дату…<small>выбрать в календаре</small><input type="date" id="sheetDate" min="${S.today}" value="${t.date && t.date >= S.today ? t.date : S.today}"></label>
+      ${MOUSE ? '<button class="wide" data-sheet="calendar">На дату…<small>выбрать в календаре</small></button>'
+        : `<label class="wide">На дату…<small>выбрать в календаре</small><input type="date" id="sheetDate" min="${S.today}" value="${t.date && t.date >= S.today ? t.date : S.today}"></label>`}
       ${t.date ? '<button class="wide" data-sheet="undate">Убрать с дня<small>вернуть в запас</small></button>' : ""}
       <button class="wide" data-sheet="urgencies">Срочность…<small>${t.pin === 1 ? "срочно (поставил сам)" : t.pin === -1 ? "может подождать (поставил сам)" : t.urgent ? "срочно (посчитано)" : "считается автоматически"}</small></button>
       <button class="wide" data-sheet="estimates">Время на задачу…<small>${t.est ? `сейчас ~${dur(t.est)}` : "оценки нет"}</small></button>
@@ -472,11 +473,44 @@ function openSheet(num) {
   $("sheet").dataset.num = num;
   $("sheet").hidden = false;
   $("veil").hidden = false;
-  $("sheetDate").addEventListener("change", (e) => {
+  $("sheetDate")?.addEventListener("change", (e) => {
     if (!e.target.value) return;
     closeSheet();
     run({ op: "move", num, date: e.target.value });
   });
+}
+
+const MONTHS = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
+
+/**
+ * Second page of the sheet with a mouse: a month of big day buttons. The system date field is a tiny popup on a
+ * desktop; on a phone it is a good wheel, so phones keep it. `month` is YYYY-MM, by default the task's or today's.
+ */
+function openCalendarSheet(num, month) {
+  const t = findTask(num);
+  if (!t) return;
+  const picked = t.date && t.date >= S.today ? t.date : null;
+  month ??= (picked ?? S.today).slice(0, 7);
+  const [y, m] = month.split("-").map(Number);
+  const shift = (k) => new Date(Date.UTC(y, m - 1 + k, 1)).toISOString().slice(0, 7);
+  const lead = (new Date(Date.UTC(y, m - 1, 1)).getUTCDay() + 6) % 7; // weeks start on Monday
+  const length = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const busy = new Map(S.days.map((d) => [d.date, d.tasks.length]));
+  const cells = Array.from({ length }, (_, i) => {
+    const d = `${month}-${String(i + 1).padStart(2, "0")}`;
+    if (d < S.today) return `<span class="past">${i + 1}</span>`;
+    const n = busy.get(d);
+    return `<button data-sheet="move" data-date="${d}" class="${d === S.today ? "today" : ""} ${d === picked ? "on" : ""}" title="${n ? `задач: ${n}` : ""}">${i + 1}${n ? "<em></em>" : ""}</button>`;
+  });
+  $("sheet").innerHTML = `<h3>${esc(t.title)}</h3>
+    <div class="calhead">
+      ${shift(-1) >= S.today.slice(0, 7) ? `<button data-sheet="calmonth" data-m="${shift(-1)}" aria-label="Предыдущий месяц">‹</button>` : "<span></span>"}
+      <b>${MONTHS[m - 1]} ${y}</b>
+      <button data-sheet="calmonth" data-m="${shift(1)}" aria-label="Следующий месяц">›</button>
+    </div>
+    <div class="calgrid">${["пн", "вт", "ср", "чт", "пт", "сб", "вс"].map((w) => `<i>${w}</i>`).join("")}${"<span></span>".repeat(lead)}${cells.join("")}</div>
+    <div class="grid"><button class="wide cancel" data-sheet="calback">Назад</button></div>`;
+  $("sheet").dataset.num = num;
 }
 
 /** Second page of the sheet: which project the task belongs to. Projects in use come first. */
@@ -659,6 +693,9 @@ document.addEventListener("click", (e) => {
   if (b.dataset.sheet === "trh") { closeSheet(); return void run({ op: "track_set", num, stage: "keep", rhythm: Number(b.dataset.v) }); }
   if (b.dataset.sheet === "tclose") { closeSheet(); return void run({ op: "say", text: `закрой направление ${num} «${b.dataset.title}»` }); }
   if (b.dataset.sheet === "projects") return openProjectSheet(num);
+  if (b.dataset.sheet === "calendar") return openCalendarSheet(num);
+  if (b.dataset.sheet === "calmonth") return openCalendarSheet(num, b.dataset.m);
+  if (b.dataset.sheet === "calback") return openSheet(num);
   if (b.dataset.sheet === "estimates") return openEstimateSheet(num);
   if (b.dataset.sheet === "urgencies") return openUrgencySheet(num);
   if (b.dataset.sheet === "dial") {

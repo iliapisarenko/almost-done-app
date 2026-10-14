@@ -160,6 +160,17 @@ h2.sep { margin-top: 26px; }
 .phead h1 { font-size: 20px; margin: 0; font-weight: 700; overflow-wrap: anywhere; }
 .pabout { color: var(--muted); font-size: 14px; margin: 0 2px 10px; }
 
+.calhead { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 8px; }
+.calhead b { font-size: 15px; }
+.sheet .calhead button { padding: 8px 18px; font-size: 18px; line-height: 1; }
+.calgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 8px; }
+.calgrid i { font-style: normal; font-size: 12px; color: var(--muted); text-align: center; padding: 2px 0 4px; }
+.sheet .calgrid button { padding: 13px 0 11px; font-weight: 500; }
+.sheet .calgrid button:hover { box-shadow: inset 0 0 0 1px var(--muted); }
+.sheet .calgrid button.today { box-shadow: inset 0 0 0 2px var(--accent); }
+.sheet .calgrid button.on { background: var(--accent); color: var(--on-accent); }
+.calgrid em { position: absolute; left: 50%; bottom: 5px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--muted); }
+.calgrid .past { text-align: center; padding: 13px 0 11px; color: var(--muted); opacity: .45; }
 .sheet .plist { display: flex; flex-direction: column; gap: 6px; max-height: 52vh; overflow-y: auto; margin-bottom: 8px; }
 .sheet .plist button { display: flex; justify-content: space-between; align-items: baseline; text-align: left; padding: 12px 14px; }
 .sheet .plist button small { margin: 0; }
