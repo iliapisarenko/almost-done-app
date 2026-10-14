@@ -162,6 +162,7 @@ h2.sep { margin-top: 26px; }
 
 .calhead { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 8px; }
 .calhead b { font-size: 15px; }
+.calpad { width: 50px; } /* stands in for «‹» in the current month, so the name stays centred */
 .sheet .calhead button { padding: 8px 18px; font-size: 18px; line-height: 1; }
 .calgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 8px; }
 .calgrid i { font-style: normal; font-size: 12px; color: var(--muted); text-align: center; padding: 2px 0 4px; }

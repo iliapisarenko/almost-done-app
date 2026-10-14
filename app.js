@@ -504,7 +504,7 @@ function openCalendarSheet(num, month) {
   });
   $("sheet").innerHTML = `<h3>${esc(t.title)}</h3>
     <div class="calhead">
-      ${shift(-1) >= S.today.slice(0, 7) ? `<button data-sheet="calmonth" data-m="${shift(-1)}" aria-label="Предыдущий месяц">‹</button>` : "<span></span>"}
+      ${shift(-1) >= S.today.slice(0, 7) ? `<button data-sheet="calmonth" data-m="${shift(-1)}" aria-label="Предыдущий месяц">‹</button>` : '<span class="calpad"></span>'}
       <b>${MONTHS[m - 1]} ${y}</b>
       <button data-sheet="calmonth" data-m="${shift(1)}" aria-label="Следующий месяц">›</button>
     </div>
