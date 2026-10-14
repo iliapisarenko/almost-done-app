@@ -462,8 +462,8 @@ function openSheet(num) {
   const quick = [0, 1, 2, 3].map((i) => `<button data-sheet="move" data-date="${day(i).date}">${esc(day(i).label)}${day(i).label === day(i).sub ? "" : `<small>${esc(day(i).sub)}</small>`}</button>`).join("");
   $("sheet").innerHTML = `<h3>${esc(t.title)}</h3>
     <div class="grid">${quick}
-      ${MOUSE ? '<button class="wide" data-sheet="calendar">На дату…<small>выбрать в календаре</small></button>'
-        : `<label class="wide">На дату…<small>выбрать в календаре</small><input type="date" id="sheetDate" min="${S.today}" value="${t.date && t.date >= S.today ? t.date : S.today}"></label>`}
+      ${MOUSE ? '<button class="wide" data-sheet="calendar">На дату…<small>до этого дня скрыта</small></button>'
+        : `<label class="wide">На дату…<small>до этого дня скрыта</small><input type="date" id="sheetDate" min="${S.today}" value="${t.date && t.date >= S.today ? t.date : S.today}"></label>`}
       ${t.date ? '<button class="wide" data-sheet="undate">Убрать с дня<small>вернуть в запас</small></button>' : ""}
       <button class="wide" data-sheet="urgencies">Срочность…<small>${t.pin === 1 ? "срочно (поставил сам)" : t.pin === -1 ? "может подождать (поставил сам)" : t.urgent ? "срочно (посчитано)" : "считается автоматически"}</small></button>
       <button class="wide" data-sheet="estimates">Время на задачу…<small>${t.est ? `сейчас ~${dur(t.est)}` : "оценки нет"}</small></button>
