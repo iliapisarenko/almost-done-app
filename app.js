@@ -102,6 +102,7 @@ async function run(body, { quiet = false } = {}) {
 function meta(t, { showDate = false } = {}) {
   const bits = [];
   // Only the most pressing tasks carry the word; the rest are simply higher or lower in the list.
+  if (t.working) bits.push('<span class="work">в работе</span>');
   if (t.urgent) bits.push('<span class="hot">срочно</span>');
   if (t.waiting) bits.push(`<span class="wait">жду: ${esc(t.waiting)}</span>`);
   if (t.after) bits.push(`<span class="wait">🔒 после: ${esc(t.after)}</span>`);
@@ -151,16 +152,21 @@ function viewDay() {
   }).join("");
   const where = dayIx === 0 ? "today" : dayIx === 1 ? "tomorrow" : "day";
   const events = d.events.map((e) => `<div class="row event ${e.routine ? "" : "own"}"><div class="when">${e.start ? `${e.start}–${e.end}` : "весь день"}</div><div class="body"><div class="title">${esc(e.title)}</div></div></div>`);
-  const timed = d.tasks.filter((t) => t.slot || t.time), loose = d.tasks.filter((t) => !t.slot && !t.time);
+  // Today starts with what is taken up by hand, wherever it is set; it is not listed twice below.
+  const working = dayIx === 0 ? S.working ?? [] : [];
+  const busy = new Set(working.map((t) => t.num));
+  const list = d.tasks.filter((t) => !busy.has(t.num));
+  const timed = list.filter((t) => t.slot || t.time), loose = list.filter((t) => !t.slot && !t.time);
   const must = loose.filter((t) => !t.optional), opt = loose.filter((t) => t.optional);
   const sum = [d.loadMin ? `задач на ~${dur(d.loadMin)}` : "", S.hasWindows ? `свободно в окнах ${dur(d.freeMin)}` : ""].filter(Boolean).join(" · ");
   const over = S.hasWindows && loose.reduce((s, t) => s + (t.optional ? 0 : t.est || 30), 0) > d.freeMin;
   return `<div class="strip">${strip}</div>
+    ${working.length ? `<h2>В работе <span>· ${working.length}</span></h2>${cardOf(working.map((t) => taskRow(t, "today")))}` : ""}
     ${events.length ? `<h2>В календаре</h2>${cardOf(events)}` : ""}
     ${timed.length ? `<h2>По часам</h2>${cardOf(timed.map((t) => taskRow(t, where)))}` : ""}
     ${must.length ? `<h2>${timed.length ? "Без времени" : "Задачи"}</h2>${cardOf(must.map((t) => taskRow(t, where)))}` : ""}
     ${opt.length ? `<h2>Если останется время</h2>${cardOf(opt.map((t) => taskRow(t, where)))}` : ""}
-    ${!d.tasks.length ? `<p class="hint">${d.events.length ? "Задач на этот день нет." : "На этот день ничего не стоит."}</p>` : ""}
+    ${!d.tasks.length && !working.length ? `<p class="hint">${d.events.length ? "Задач на этот день нет." : "На этот день ничего не стоит."}</p>` : ""}
     ${sum ? `<p class="sum">${sum}${over ? ". Не всё влезает: что-то стоит перенести." : ""}</p>` : ""}
     ${S.hasWindows ? `<button class="big ${loose.length || !d.tasks.length ? "" : "ghost"}" data-act="plan" data-date="${d.date}">${loose.length ? "Разложить по часам" : d.tasks.length ? "Разложить заново" : "Разложить из запаса"}</button>` : `<p class="sum">Чтобы раскладывать дела по часам, расскажи планеру, когда ты ими занимаешься: «днём с 12 до 17 дела, ночью с 0:30 до 2:30 приложения».</p>`}`;
 }
@@ -524,7 +530,7 @@ let hold = null; // { timer, x, y, row }
 let swallowClick = false; // the click that ends a long press must not also expand the row
 
 function findTask(num) {
-  const all = [...S.days.flatMap((d) => d.tasks), ...S.backlog, ...S.later, ...S.someday, ...(S.blocked ?? [])];
+  const all = [...(S.working ?? []), ...S.days.flatMap((d) => d.tasks), ...S.backlog, ...S.later, ...S.someday, ...(S.blocked ?? [])];
   return all.find((t) => t.num === num) ?? all.flatMap((t) => t.steps.map((s) => ({ ...s, steps: [] }))).find((s) => s.num === num);
 }
 
@@ -543,6 +549,8 @@ function openSheet(num) {
     <div class="grid">${quick}
       ${MOUSE ? '<button class="wide" data-sheet="calendar">На дату…<small>до этого дня скрыта</small></button>'
         : `<label class="wide">На дату…<small>до этого дня скрыта</small><input type="date" id="sheetDate" min="${S.today}" value="${t.date && t.date >= S.today ? t.date : S.today}"></label>`}
+      ${t.working ? '<button class="wide" data-sheet="work" data-v="0">Снять «в работе»<small>вернуть в обычный список</small></button>'
+        : '<button class="wide" data-sheet="work" data-v="1">В работу<small>наверх дня; сама снимется через двое суток</small></button>'}
       ${t.date ? '<button class="wide" data-sheet="undate">Убрать с дня<small>вернуть в запас</small></button>' : ""}
       <button class="wide" data-sheet="urgencies">Срочность…<small>${t.pin === 1 ? "срочно (поставил сам)" : t.pin === -1 ? "может подождать (поставил сам)" : t.urgent ? "срочно (посчитано)" : "считается автоматически"}</small></button>
       <button class="wide" data-sheet="estimates">Время на задачу…<small>${t.est ? `сейчас ~${dur(t.est)}` : "оценки нет"}</small></button>
@@ -788,6 +796,7 @@ document.addEventListener("click", (e) => {
   if (b.dataset.sheet === "project") run({ op: "project", num, project: b.dataset.project ? Number(b.dataset.project) : null });
   if (b.dataset.sheet === "move") run({ op: "move", num, date: b.dataset.date });
   if (b.dataset.sheet === "undate") run({ op: "undate", num });
+  if (b.dataset.sheet === "work") run({ op: "work", num, value: b.dataset.v === "1" });
 }, true);
 
 $("sayInput").addEventListener("input", (e) => ($("sayBtn").disabled = !e.target.value.trim()));

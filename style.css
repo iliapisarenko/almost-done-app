@@ -18,6 +18,7 @@ html.web .seg { grid-template-columns: repeat(6, 1fr); }
   html.web { --s1: #104281; --s2: #1c5cab; --s3: #2a78d6; --s4: #5598e7; --s5: #86b6ef; --in: #d95926; --out: #3987e5; }
 }
 .stats .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+.meta .work { color: var(--on-accent); background: var(--accent); border-radius: 6px; padding: 0 6px; font-weight: 700; font-size: 11.5px; line-height: 1.5; }
 .tile { background: var(--card); border-radius: 12px; padding: 12px 14px; }
 .tile b { display: block; font-size: 30px; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .tile span { display: block; font-weight: 600; margin-top: 2px; }
