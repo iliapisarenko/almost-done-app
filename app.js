@@ -546,7 +546,9 @@ function openSheet(num) {
   // The next few days by name, then any date from the system picker.
   const quick = [0, 1, 2, 3].map((i) => `<button data-sheet="move" data-date="${day(i).date}">${esc(day(i).label)}${day(i).label === day(i).sub ? "" : `<small>${esc(day(i).sub)}</small>`}</button>`).join("");
   $("sheet").innerHTML = `<h3>${esc(t.title)}</h3>
-    <div class="grid">${quick}
+    <div class="grid">
+      <button class="wide" data-sheet="edit">Изменить текст…<small>название и заметка</small></button>
+      ${quick}
       ${MOUSE ? '<button class="wide" data-sheet="calendar">На дату…<small>до этого дня скрыта</small></button>'
         : `<label class="wide">На дату…<small>до этого дня скрыта</small><input type="date" id="sheetDate" min="${S.today}" value="${t.date && t.date >= S.today ? t.date : S.today}"></label>`}
       ${t.working ? '<button class="wide" data-sheet="work" data-v="0">Снять «в работе»<small>вернуть в обычный список</small></button>'
@@ -598,6 +600,31 @@ function openCalendarSheet(num, month) {
     <div class="calgrid">${["пн", "вт", "ср", "чт", "пт", "сб", "вс"].map((w) => `<i>${w}</i>`).join("")}${"<span></span>".repeat(lead)}${cells.join("")}</div>
     <div class="grid"><button class="wide cancel" data-sheet="calback">Назад</button></div>`;
   $("sheet").dataset.num = num;
+}
+
+/** Second page of the sheet: the title and the note, edited by hand. */
+function openEditSheet(num) {
+  const t = findTask(num);
+  if (!t) return;
+  $("sheet").innerHTML = `<h3>Изменить задачу</h3>
+    <label class="flabel">Название<input id="editTitle" class="field" type="text" maxlength="300" value="${esc(t.title)}" enterkeyhint="done"></label>
+    <label class="flabel">Заметка<textarea id="editNotes" class="field" rows="4" maxlength="1000" placeholder="Детали, ссылки, что уже сделано">${esc(t.notes ?? "")}</textarea></label>
+    <div class="grid"><button class="wide" data-sheet="editsave">Сохранить</button><button class="wide cancel" data-sheet="calback">Назад</button></div>`;
+  $("sheet").dataset.num = num;
+  const f = $("editTitle");
+  f.focus();
+  f.setSelectionRange(f.value.length, f.value.length);
+  f.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveEdit(num); } });
+}
+
+function saveEdit(num) {
+  const t = findTask(num);
+  const title = $("editTitle").value.trim(), notes = $("editNotes").value.trim();
+  closeSheet();
+  if (!t || (title === t.title && notes === (t.notes ?? ""))) return;
+  if (!title) return toast("Название не может быть пустым.");
+  // Only what changed goes out: an unchanged field is sent empty, which the server reads as «leave as is».
+  run({ op: "edit", num, title: title !== t.title ? title : "", notes: notes !== (t.notes ?? "") ? notes : "" });
 }
 
 /** Second page of the sheet: which project the task belongs to. Projects in use come first. */
@@ -780,6 +807,8 @@ document.addEventListener("click", (e) => {
   if (b.dataset.sheet === "trh") { closeSheet(); return void run({ op: "track_set", num, stage: "keep", rhythm: Number(b.dataset.v) }); }
   if (b.dataset.sheet === "tclose") { closeSheet(); return void run({ op: "say", text: `закрой направление ${num} «${b.dataset.title}»` }); }
   if (b.dataset.sheet === "projects") return openProjectSheet(num);
+  if (b.dataset.sheet === "edit") return openEditSheet(num);
+  if (b.dataset.sheet === "editsave") return saveEdit(num);
   if (b.dataset.sheet === "calendar") return openCalendarSheet(num);
   if (b.dataset.sheet === "calmonth") return openCalendarSheet(num, b.dataset.m);
   if (b.dataset.sheet === "calback") return openSheet(num);
