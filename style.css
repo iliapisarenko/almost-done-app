@@ -209,7 +209,7 @@ h2.sep { margin-top: 26px; }
 .pabout { color: var(--muted); font-size: 14px; margin: 0 2px 10px; }
 
 .sheet .flabel { display: block; text-align: left; background: none; padding: 0; margin: 0 2px 10px; font-weight: 600; font-size: 13px; color: var(--muted); }
-.sheet .flabel .field { position: static; opacity: 1; display: block; width: 100%; height: auto; margin-top: 4px; border: 0; outline: 0; background: var(--card); color: var(--text); border-radius: 10px; padding: 10px 12px; font: 15px/1.35 inherit; font-family: inherit; font-weight: 400; resize: vertical; }
+.sheet .flabel .field { position: static; opacity: 1; display: block; width: 100%; height: auto; margin-top: 4px; border: 0; outline: 0; background: var(--card); color: var(--text); border-radius: 10px; padding: 10px 12px; font-family: inherit; font-size: 15px; line-height: 1.35; font-weight: 400; resize: vertical; }
 .calhead { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 8px; }
 .calhead b { font-size: 15px; }
 .calpad { width: 50px; } /* stands in for «‹» in the current month, so the name stays centred */

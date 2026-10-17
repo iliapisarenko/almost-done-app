@@ -620,11 +620,13 @@ function openEditSheet(num) {
 function saveEdit(num) {
   const t = findTask(num);
   const title = $("editTitle").value.trim(), notes = $("editNotes").value.trim();
+  if (!title) return toast("Название не может быть пустым.");
   closeSheet();
   if (!t || (title === t.title && notes === (t.notes ?? ""))) return;
-  if (!title) return toast("Название не может быть пустым.");
   // Only what changed goes out: an unchanged field is sent empty, which the server reads as «leave as is».
-  run({ op: "edit", num, title: title !== t.title ? title : "", notes: notes !== (t.notes ?? "") ? notes : "" });
+  // A note wiped out completely needs its own word, since empty means «leave as is».
+  const clear = !notes && !!t.notes;
+  run({ op: "edit", num, title: title !== t.title ? title : "", notes: notes !== (t.notes ?? "") ? notes : "", clear });
 }
 
 /** Second page of the sheet: which project the task belongs to. Projects in use come first. */
