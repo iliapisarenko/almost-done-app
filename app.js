@@ -9,6 +9,8 @@ tg?.expand();
 // Outside Telegram (Safari, a Dock app) initData is empty: the key from the /web link signs the requests instead.
 // It comes after «#», so the page host never sees it; it is kept on this device and taken out of the address bar.
 const inTelegram = !!tg?.initData;
+// A mouse (a desktop, the browser or Telegram on a Mac): right click menu, copy buttons, the month calendar.
+const MOUSE = matchMedia("(pointer: fine)").matches;
 const KEY_STORE = "almost-done-web-key";
 let webKey = null;
 let keyKept = false; // false when the browser would not store it (a private window): then a reload must not drop it
@@ -52,6 +54,7 @@ const dur = (m) => {
   const h = Math.floor(m / 60), r = m % 60;
   return [h ? `${h} ч` : "", r || !h ? `${r} мин` : ""].filter(Boolean).join(" ");
 };
+const COPY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>';
 const TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
 
 async function call(body) {
@@ -137,7 +140,7 @@ function taskRow(t, where) {
     <div class="body" data-act="toggle" data-num="${t.num}">
       <div class="title">${esc(t.title)}</div>${meta(t, { showDate: where === "later" || where === "project" })}
       ${isOpen ? `<div class="more">${steps}${t.notes ? `<p class="note">${esc(t.notes)}</p>` : ""}<div class="acts">${acts.join("")}</div></div>` : ""}
-    </div></div>`;
+    </div>${MOUSE ? `<button class="copy" data-act="copy" data-num="${t.num}" title="Скопировать" aria-label="Скопировать текст задачи">${COPY}</button>` : ""}</div>`;
 }
 
 const cardOf = (rows) => (rows.length ? `<div class="card">${rows.join("")}</div>` : "");
@@ -456,6 +459,18 @@ document.addEventListener("click", (e) => {
   if (act === "hide") return void ($("toast").hidden = true);
   if (act === "undo") return void run({ op: "undo" });
   if (act === "redo") return void run({ op: "say", text: "отмени отмену" });
+  if (act === "copy") {
+    // With a mouse, like the button on a code block: the title, and the note under it when there is one.
+    const t = findTask(Number(num));
+    if (!t) return;
+    const text = t.notes ? `${t.title}\n${t.notes}` : t.title;
+    navigator.clipboard?.writeText(text).then(() => {
+      el.classList.add("done");
+      el.innerHTML = TICK;
+      setTimeout(() => { el.classList.remove("done"); el.innerHTML = COPY; }, 1200);
+    }, () => toast("Не получилось скопировать."));
+    return;
+  }
   if (act === "note-del") return void run({ op: "note_del", num: Number(num) });
   if (act === "note-add") {
     const input = el.previousElementSibling;
@@ -767,7 +782,6 @@ document.addEventListener("pointermove", (e) => {
 });
 for (const ev of ["pointerup", "pointercancel", "scroll"]) document.addEventListener(ev, dropHold, true);
 // With a mouse a right click opens the same menu as holding a finger on the task.
-const MOUSE = matchMedia("(pointer: fine)").matches;
 document.addEventListener("contextmenu", (e) => {
   const row = e.target.closest(".row.task");
   if (!row) return;
