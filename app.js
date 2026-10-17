@@ -287,7 +287,9 @@ function tracksOf(name) {
 
 function projectList() {
   const by = new Map();
-  for (const t of allTasks()) by.set(t.project ?? "", [...(by.get(t.project ?? "") ?? []), t]);
+  // A step whose task is listed too is shown inside that task, not as a line of its own.
+  const all = allTasks(), nums = new Set(all.map((t) => t.num));
+  for (const t of all.filter((t) => !(t.parentNum && nums.has(t.parentNum)))) by.set(t.project ?? "", [...(by.get(t.project ?? "") ?? []), t]);
   const horizon = S.days[S.days.length - 1].date;
   const names = new Set([...by.keys(), ...S.tracks.filter((t) => t.depth === 0 && t.project).map((t) => t.project)]);
   return [...names].map((name) => {
