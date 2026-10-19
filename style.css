@@ -12,7 +12,6 @@
 /* Overview tab: only in a browser. Chart colours: one blue ramp for amounts, blue and orange for in and out. */
 .webonly { display: none; }
 html.web .webonly { display: block; }
-html.web .seg { grid-template-columns: repeat(6, 1fr); }
 :root { --s1: #cde2fb; --s2: #9ec5f4; --s3: #6da7ec; --s4: #3987e5; --s5: #256abf; --in: #eb6834; --out: #2a78d6; }
 @media (prefers-color-scheme: dark) {
   html.web { --s1: #104281; --s2: #1c5cab; --s3: #2a78d6; --s4: #5598e7; --s5: #86b6ef; --in: #d95926; --out: #3987e5; }
@@ -25,6 +24,44 @@ html.web .seg { grid-template-columns: repeat(6, 1fr); }
 .row.task .copy:hover { color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
 .row.task .copy svg { width: 15px; height: 15px; }
 .row.task .copy.done { opacity: 1; color: var(--ok); }
+.chip.off { opacity: .55; }
+.offdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.offdays button { background: var(--card); border-radius: 10px; padding: 9px 0; font-weight: 600; color: var(--muted); }
+.offdays button.on { background: var(--accent); color: var(--on-accent); }
+.offadd { display: block; position: relative; text-align: center; background: var(--card); border-radius: 12px; padding: 11px; margin-top: 8px; font-weight: 600; color: var(--accent); cursor: pointer; }
+.offadd input { position: absolute; inset: 0; opacity: 0; width: 100%; }
+.since { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+.since button { background: var(--bg); border-radius: 8px; padding: 5px 10px; font-size: 13px; color: var(--muted); }
+.since button.on { background: var(--accent); color: var(--on-accent); }
+.chg details { margin: 6px 0; }
+.chg summary { cursor: pointer; font-weight: 600; }
+.chg summary span { color: var(--muted); font-weight: 400; }
+.chg ul { margin: 4px 0 8px; padding-left: 18px; font-size: 13px; }
+.chg li { margin: 3px 0; }
+.chg li small { color: var(--muted); }
+.chg li em { font-style: normal; font-size: 12px; color: var(--muted); }
+.chg li em.later { color: var(--warn); }
+html.web main:has(.line) { max-width: 1240px; }
+.line { overflow-x: auto; margin-top: 6px; }
+.lgrid { display: grid; grid-template-columns: 150px repeat(var(--days), minmax(22px, 1fr)); gap: 2px; min-width: 760px; }
+.lgrid > i { font-style: normal; font-size: 10px; color: var(--muted); text-align: center; line-height: 1.2; padding-bottom: 4px; position: relative; }
+.lgrid > i b { display: block; font-size: 12px; color: var(--text); font-weight: 600; }
+.lgrid > i em { position: absolute; top: -14px; left: 0; font-style: normal; font-size: 10px; font-weight: 700; color: var(--text); text-transform: uppercase; }
+.lgrid > i.today b { color: var(--accent); }
+.lgrid > i.off, .lcell.off { opacity: .55; }
+.lname { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; align-self: center; padding-right: 6px; }
+.lname.head { min-height: 1px; }
+.lcell { background: var(--card); border-radius: 4px; min-height: 30px; display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 2px; padding: 2px; }
+.lcell.off { background: repeating-linear-gradient(135deg, var(--card) 0 4px, var(--bg) 4px 7px); }
+.lcell.today { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.lcell span, .lm { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--out); }
+.lcell span.hot, .lm.hot { background: #d0443e; }
+.lcell span.work, .lm.work { background: var(--ok); }
+.lcell span.dl, .lm.dl { border-radius: 1px; transform: rotate(45deg); width: 7px; height: 7px; background: var(--warn); }
+.lcell span.held, .lm.held { background: none; box-shadow: inset 0 0 0 1.5px var(--muted); }
+.lcell small { font-size: 9px; color: var(--muted); }
+.sw.offsw { background: repeating-linear-gradient(135deg, var(--card) 0 3px, var(--muted) 3px 4px); }
+html.web .seg { grid-template-columns: repeat(7, 1fr); }
 .tile { background: var(--card); border-radius: 12px; padding: 12px 14px; }
 .tile b { display: block; font-size: 30px; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .tile span { display: block; font-weight: 600; margin-top: 2px; }

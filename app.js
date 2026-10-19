@@ -151,7 +151,7 @@ function viewDay() {
   const d = S.days[dayIx];
   const strip = S.days.map((x, i) => {
     const [w, n] = x.sub.split(" ");
-    return `<button class="chip ${i === dayIx ? "on" : ""} ${x.tasks.length ? "has" : ""}" data-act="day" data-ix="${i}">${esc(w)}<b>${esc(n)}</b><i></i></button>`;
+    return `<button class="chip ${i === dayIx ? "on" : ""} ${x.tasks.length ? "has" : ""} ${x.off ? "off" : ""}" data-act="day" data-ix="${i}">${esc(w)}<b>${esc(n)}</b><i></i></button>`;
   }).join("");
   const where = dayIx === 0 ? "today" : dayIx === 1 ? "tomorrow" : "day";
   const events = d.events.map((e) => `<div class="row event ${e.routine ? "" : "own"}"><div class="when">${e.start ? `${e.start}–${e.end}` : "весь день"}</div><div class="body"><div class="title">${esc(e.title)}</div></div></div>`);
@@ -162,8 +162,9 @@ function viewDay() {
   const timed = list.filter((t) => t.slot || t.time), loose = list.filter((t) => !t.slot && !t.time);
   const must = loose.filter((t) => !t.optional), opt = loose.filter((t) => t.optional);
   const sum = [d.loadMin ? `задач на ~${dur(d.loadMin)}` : "", S.hasWindows ? `свободно в окнах ${dur(d.freeMin)}` : ""].filter(Boolean).join(" · ");
-  const over = S.hasWindows && loose.reduce((s, t) => s + (t.optional ? 0 : t.est || 30), 0) > d.freeMin;
+  const over = S.hasWindows && !d.off && loose.reduce((s, t) => s + (t.optional ? 0 : t.est || 30), 0) > d.freeMin;
   return `<div class="strip">${strip}</div>
+    ${d.off ? '<p class="sum">Выходной: окон для дел нет, раскладка сюда ничего не ставит. Изменить: «Память» → «Выходные».</p>' : ""}
     ${working.length ? `<h2>В работе <span>· ${working.length}</span></h2>${cardOf(working.map((t) => taskRow(t, "today")))}` : ""}
     ${events.length ? `<h2>В календаре</h2>${cardOf(events)}` : ""}
     ${timed.length ? `<h2>По часам</h2>${cardOf(timed.map((t) => taskRow(t, where)))}` : ""}
@@ -180,9 +181,9 @@ function viewWeek() {
     const cap = d.loadMin + d.freeMin;
     const pct = cap ? Math.min(100, Math.round((d.loadMin / cap) * 100)) : 0;
     const loose = d.tasks.filter((t) => !t.slot && !t.time && !t.optional).reduce((s, t) => s + (t.est || 30), 0);
-    const over = S.hasWindows && loose > d.freeMin;
+    const over = S.hasWindows && !d.off && loose > d.freeMin;
     const fixed = d.events.filter((e) => e.start).map((e) => `${e.start} ${esc(e.title)}`).slice(0, 3).join(" · ");
-    const room = S.hasWindows ? (d.loadMin ? `занято ${dur(d.loadMin)} из ${dur(cap)}` : `свободно ${dur(d.freeMin)}`) : "";
+    const room = d.off ? "выходной, окон для дел нет" : S.hasWindows ? (d.loadMin ? `занято ${dur(d.loadMin)} из ${dur(cap)}` : `свободно ${dur(d.freeMin)}`) : "";
     return `<button class="wk" data-act="day" data-ix="${i}" data-go="1">
       <div class="head"><b>${esc(d.label)}${i < 2 ? `, ${esc(d.sub)}` : ""}</b><span>${d.tasks.length ? `задач: ${d.tasks.length}` : "пусто"}</span></div>
       <div class="bar ${over ? "over" : ""}"><i style="width:${pct}%"></i></div>
@@ -240,6 +241,18 @@ const STAGE_RU = { idle: "на паузе", launch: "запуск", rhythm: "и�
 const trackRow = (t) => `<button class="mem track tap" style="padding-left:${12 + t.depth * 16}px" data-act="track" data-num="${t.num}">
   <div><b>${esc(t.title)}</b>${t.project ? ` <small>${esc(t.project)}</small>` : ""}<p>${esc(t.status)}${t.tasks ? ` · задач: ${t.tasks}` : ""}</p></div><span class="chev">›</span></button>`;
 
+/** Days off: weekdays as toggles, single dates as a list with ✕ and a date field to add one. */
+function offSection() {
+  if (!S.off) return "";
+  const wd = [["mon", "пн"], ["tue", "вт"], ["wed", "ср"], ["thu", "чт"], ["fri", "пт"], ["sat", "сб"], ["sun", "вс"]];
+  const fmt = (d) => { const x = new Date(`${d}T12:00:00Z`); return `${x.getUTCDate()}.${String(x.getUTCMonth() + 1).padStart(2, "0")}`; };
+  return `<h2>Выходные</h2>
+    <div class="offdays">${wd.map(([k, l]) => `<button class="${S.off.weekdays.includes(k) ? "on" : ""}" data-act="offwd" data-day="${k}">${l}</button>`).join("")}</div>
+    ${S.off.dates.length ? `<div class="card">${S.off.dates.map((d) => `<div class="mem note"><span>${fmt(d)}</span><button data-act="offdel" data-date="${d}" aria-label="Убрать">✕</button></div>`).join("")}</div>` : ""}
+    <label class="offadd">＋ Отдельный день<input type="date" id="offDate" min="${S.today}"></label>
+    <p class="sum">В выходной окон для дел нет: раскладка туда ничего не ставит, «на завтра» его пропускает.</p>`;
+}
+
 function viewMemory() {
   const fixed = S.routines.filter((r) => r.kind === "fixed"), win = S.routines.filter((r) => r.kind === "window");
   const rt = (r) => `<button class="mem tap" data-act="routine" data-num="${r.num}"><div><b>${esc(r.title)}</b> <small>${r.start}–${r.end} · ${esc(r.days)}${r.skips.length ? ` · кроме ${r.skips.map((d) => `${d.slice(8)}.${d.slice(5, 7)}`).join(", ")}` : ""}</small>${r.hint ? `<p>${esc(r.hint)}</p>` : ""}</div><span class="chev">›</span></button>`;
@@ -253,6 +266,7 @@ function viewMemory() {
     ${fixed.length ? `<div class="card">${fixed.map(rt).join("")}</div>` : ""}
     ${win.length ? `<h2>Окна для дел</h2><div class="card">${win.map(rt).join("")}</div>` : ""}
     <button class="big ghost" data-act="routine" data-num="">＋ Добавить в расписание</button>
+    ${offSection()}
     ${tracks}
     <h2>Про тебя</h2>${noteList(S.about, "")}
     <h2>Проекты <span>· ${pr.length}</span></h2>
@@ -422,7 +436,92 @@ function viewStats() {
       <div class="vkey"><span><i class="sw created"></i>пришло новых (вверх)</span><span><i class="sw closed"></i>закрыто (вниз)</span></div>
       <p class="sum">${net > 0 ? `За две недели пришло на ${net} больше, чем закрыто: запас растёт.` : net < 0 ? `За две недели закрыто на ${-net} больше, чем пришло: запас тает.` : "За две недели пришло столько же, сколько закрыто."}</p></section>`;
 
-  return `<div class="stats">${tiles}${heat}<div class="vrow">${time}${flow}</div></div>`;
+  return `<div class="stats">${tiles}${changesSection()}${heat}<div class="vrow">${time}${flow}</div></div>`;
+}
+
+// ---------- what changed since a day (asked from the server on demand) ----------
+
+let chg = { since: null, data: null, busy: false };
+const fmtD = (d) => { const x = new Date(`${d}T12:00:00Z`); return `${x.getUTCDate()}.${String(x.getUTCMonth() + 1).padStart(2, "0")}`; };
+function sinceOptions() {
+  const wd = (new Date(`${S.today}T12:00:00Z`).getUTCDay() + 6) % 7; // days since Monday
+  return [["7 дней", addD(S.today, -6)], ["с понедельника", addD(S.today, -wd)], ["14 дней", addD(S.today, -13)]];
+}
+async function loadChanges(since) {
+  chg = { since, data: chg.data, busy: true };
+  let data = null;
+  try {
+    data = await call({ op: "changes", since });
+  } catch (e) {
+    toast(e.message);
+  }
+  if (chg.since !== since) return; // another period was picked meanwhile: its answer decides
+  chg.data = data ?? chg.data;
+  chg.busy = false;
+  if (tab === "stats") render();
+}
+function changesSection() {
+  const opts = sinceOptions();
+  if (!chg.since && !chg.busy) setTimeout(() => loadChanges(opts[0][1]), 0);
+  const pick = `<div class="since">${opts.map(([l, d]) => `<button class="${chg.since === d ? "on" : ""}" data-act="since" data-date="${d}">${l}</button>`).join("")}</div>`;
+  const c = chg.data && chg.data.since === chg.since ? chg.data : null;
+  if (!c) return `<section class="viz"><h2>Что изменилось</h2>${pick}<p class="hint">Считаю…</p></section>`;
+  const li = (t, extra = "") => `<li><b>${t.num}</b> ${esc(t.title)}${t.project ? ` <small>${esc(t.project)}</small>` : ""}${extra}</li>`;
+  const move = (t) => t.from && t.to ? (t.to > t.from ? ` <em class="later">${fmtD(t.from)} → ${fmtD(t.to)}</em>` : ` <em>${fmtD(t.from)} → ${fmtD(t.to)}</em>`)
+    : t.to ? ` <em>получила день ${fmtD(t.to)}</em>` : ` <em class="later">убрана с ${fmtD(t.from)}</em>`;
+  const group = (title, list, f) => list.length ? `<details ${list.length <= 6 ? "open" : ""}><summary>${title} <span>· ${list.length}</span></summary><ul>${list.map(f).join("")}</ul></details>` : "";
+  const later = c.moved.filter((t) => !t.to || (t.from && t.to > t.from)).length;
+  const body = [
+    group("Закрыто", c.closed, (t) => li(t)),
+    group("Пришло", c.created, (t) => li(t, t.status === "done" ? " <em>уже закрыта</em>" : t.status === "dropped" ? " <em>убрана</em>" : "")),
+    group("Сдвинуто", c.moved, (t) => li(t, move(t))),
+    group("Убрано", c.dropped, (t) => li(t)),
+  ].join("") || '<p class="hint">Ничего не менялось.</p>';
+  return `<section class="viz chg"><h2>Что изменилось <span>· с ${fmtD(c.since)}</span></h2>${pick}
+    <p class="sum">Закрыто ${c.closed.length}, пришло ${c.created.length}, сдвинуто ${c.moved.length}${later ? `, из них на потом ${later}` : ""}.</p>${body}</section>`;
+}
+
+// ---------- timeline: four weeks by project (browser only) ----------
+
+function viewLine() {
+  const DAYS = 28;
+  const dates = Array.from({ length: DAYS }, (_, i) => addD(S.today, i));
+  const offs = new Set([...(S.off?.dates ?? []), ...dates.filter((d) => (S.off?.weekdays ?? []).includes(["sun", "mon", "tue", "wed", "thu", "fri", "sat"][new Date(`${d}T12:00:00Z`).getUTCDay()]))]);
+  const seen = new Set();
+  const all = [...allTasks(), ...(S.blocked ?? [])].filter((t) => !seen.has(t.num) && seen.add(t.num));
+  const nums = new Set(all.map((t) => t.num));
+  const tasks = all.filter((t) => !(t.parentNum && nums.has(t.parentNum)));
+  const rows = new Map();
+  const put = (name, date, kind, t) => {
+    if (!date || date < S.today || date > dates.at(-1)) return;
+    const r = rows.get(name) ?? new Map();
+    const cell = r.get(date) ?? [];
+    cell.push({ kind, t });
+    r.set(date, cell);
+    rows.set(name, r);
+  };
+  for (const t of tasks) {
+    const name = t.project ?? "";
+    // A task waiting for its deadline only (no day of its own) shows the deadline alone.
+    if (t.date && t.date !== t.deadline) put(name, t.date < S.today ? S.today : t.date, "task", t);
+    if (t.deadline) put(name, t.deadline < S.today ? S.today : t.deadline, "dl", t);
+  }
+  if (!rows.size) return '<p class="hint">На четыре недели вперёд ничего не стоит.</p>';
+  const order = [...rows].sort((a, b) => (a[0] === "" ? 1 : b[0] === "" ? -1 : [...b[1].values()].flat().length - [...a[1].values()].flat().length));
+  const head = dates.map((d, i) => {
+    const x = new Date(`${d}T12:00:00Z`);
+    const first = i === 0 || x.getUTCDate() === 1;
+    return `<i class="${offs.has(d) ? "off" : ""} ${d === S.today ? "today" : ""}">${first ? `<em>${MONTHS[x.getUTCMonth()].slice(0, 3)}</em>` : ""}${["вс", "пн", "вт", "ср", "чт", "пт", "сб"][x.getUTCDay()]}<b>${x.getUTCDate()}</b></i>`;
+  }).join("");
+  const body = order.map(([name, cells]) => `<div class="lname" title="${esc(name || "Без проекта")}">${esc(name || "Без проекта")}</div>` + dates.map((d) => {
+    const c = cells.get(d) ?? [];
+    const tip = c.map((x) => `${x.kind === "dl" ? "срок: " : x.t.after ? "ждёт: " : ""}${x.t.title}`).join(" · ");
+    const marks = c.slice(0, 4).map((x) => `<span class="${x.kind === "dl" ? "dl" : x.t.after ? "held" : x.t.working ? "work" : x.t.urgent ? "hot" : "task"}"></span>`).join("") + (c.length > 4 ? `<small>+${c.length - 4}</small>` : "");
+    return `<div class="lcell ${offs.has(d) ? "off" : ""} ${d === S.today ? "today" : ""}" ${tip ? `data-tip="${esc(tip)}"` : ""}>${marks}</div>`;
+  }).join("")).join("");
+  return `<p class="sum">Четыре недели вперёд по проектам. Точка: задача на этот день, ромб: срок, полая точка: ждёт другую задачу. Наведи, чтобы увидеть названия.</p>
+    <div class="line"><div class="lgrid" style="--days:${DAYS}"><div class="lname head"></div>${head}${body}</div></div>
+    <div class="vkey"><span><i class="lm task"></i>задача</span><span><i class="lm hot"></i>срочная</span><span><i class="lm work"></i>в работе</span><span><i class="lm dl"></i>срок</span><span><i class="lm held"></i>ждёт другую</span><span><i class="sw offsw"></i>выходной</span></div>`;
 }
 
 // One tooltip for every chart mark that carries data-tip.
@@ -443,7 +542,7 @@ document.addEventListener("mousemove", (e) => {
 function render() {
   if (!S) return;
   document.querySelectorAll("#seg button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
-  $("view").innerHTML = { day: viewDay, week: viewWeek, projects: viewProjects, backlog: viewBacklog, memory: viewMemory, stats: viewStats }[tab]();
+  $("view").innerHTML = { day: viewDay, week: viewWeek, projects: viewProjects, backlog: viewBacklog, memory: viewMemory, stats: viewStats, line: viewLine }[tab]();
 }
 
 // ---------- events ----------
@@ -480,7 +579,10 @@ document.addEventListener("click", (e) => {
     if (!text) return void input?.focus();
     return void run({ op: "note_add", text, project: input.dataset.noteFor ? Number(input.dataset.noteFor) : null });
   }
+  if (act === "since") return void loadChanges(date);
   if (act === "routine") return openRoutineSheet(num ? Number(num) : null);
+  if (act === "offwd") return void run({ op: "off_weekday", day: el.dataset.day, value: !S.off.weekdays.includes(el.dataset.day) });
+  if (act === "offdel") return void run({ op: "off_date", date, value: false });
   if (act === "track") return openTrackSheet(Number(num));
   if (act === "proj") {
     proj = el.dataset.name;
@@ -846,6 +948,10 @@ document.addEventListener("click", (e) => {
   if (b.dataset.sheet === "work") run({ op: "work", num, value: b.dataset.v === "1" });
 }, true);
 
+document.addEventListener("change", (e) => {
+  // A year typed digit by digit passes through dates like 0002-10-20: only a real day from today on is sent.
+  if (e.target.id === "offDate" && /^\d{4}-\d{2}-\d{2}$/.test(e.target.value) && e.target.value >= S.today) run({ op: "off_date", date: e.target.value, value: true });
+});
 $("sayInput").addEventListener("input", (e) => ($("sayBtn").disabled = !e.target.value.trim()));
 $("say").addEventListener("submit", (e) => {
   e.preventDefault();
