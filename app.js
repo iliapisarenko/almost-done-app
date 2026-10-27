@@ -65,6 +65,7 @@ async function call(body) {
   });
   const json = await res.json().catch(() => ({}));
   if (res.status === 401 && !inTelegram) {
+    if (!$("chat").hidden) closeChat();
     needKey("Ссылка больше не действует.");
     throw new Error("Нужна новая ссылка: /web в чате с ботом.");
   }
@@ -722,6 +723,7 @@ function closeChat() {
 }
 
 async function openChat(num = null, record = false) {
+  if (!inTelegram && !webKey) return needKey("Здесь планер открывается по личной ссылке.");
   const t = num == null ? null : findTask(num);
   if (num != null && !t) return;
   cancelVoice();
