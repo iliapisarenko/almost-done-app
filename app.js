@@ -93,23 +93,27 @@ async function transcribeAudio(num, audio) {
 }
 
 let toastTimer;
-function toast(text, undo) {
+let toastFollowup = null;
+function toast(text, undo = false, followup = null) {
   const el = $("toast");
-  el.innerHTML = esc(text) + (undo ? '<br><button data-act="undo">Отменить</button>' : "") + '<button data-act="hide">Скрыть</button>';
+  toastFollowup = followup;
+  el.innerHTML = `<div>${esc(text)}</div><div class="toast-actions">${undo ? '<button data-act="undo">Отменить</button>' : ""}${followup ? '<button data-act="done-chat">💬 Чат</button><button data-act="done-voice">🎙 Сказать</button>' : ""}<button data-act="hide">Скрыть</button></div>`;
   el.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (el.hidden = true), undo ? 9000 : 6000);
+  toastTimer = setTimeout(() => (el.hidden = true), followup ? 18_000 : undo ? 9000 : 6000);
 }
 
 /** Runs an operation, shows what the planner answered and redraws from the returned state. */
 async function run(body, { quiet = false } = {}) {
+  const completed = body.op === "done" ? findTask(Number(body.num)) : null;
   document.body.classList.add("busy");
   try {
     const r = await call(body);
     if (r.state) S = r.state;
     else S = r;
     if (!quiet) tg?.HapticFeedback?.notificationOccurred("success");
-    if (r.reply && !quiet) toast(r.reply, !!r.undoable);
+    const followup = completed && r.closed?.includes(Number(body.num)) ? { num: Number(body.num), title: completed.title } : null;
+    if (r.reply && !quiet) toast(r.reply, !!r.undoable, followup);
     render();
   } catch (e) {
     tg?.HapticFeedback?.notificationOccurred("error");
@@ -578,6 +582,11 @@ document.addEventListener("click", (e) => {
   if (!el) return;
   const { act, num, op, date, ix } = el.dataset;
   if (act === "hide") return void ($("toast").hidden = true);
+  if (act === "done-chat" || act === "done-voice") {
+    if (!toastFollowup) return;
+    $("toast").hidden = true;
+    return void openChat(null, act === "done-voice", toastFollowup);
+  }
   if (act === "undo") return void run({ op: "undo" });
   if (act === "redo") return void run({ op: "say", text: "отмени отмену" });
   if (act === "copy") {
@@ -677,6 +686,7 @@ function findTask(num) {
 
 let voiceSession = null;
 let chatContext = null; // null = general chat, task number = scoped chat
+let chatDone = null; // recently completed task, kept as context for the follow-up
 let chatLoad = 0;
 
 function cancelVoice() {
@@ -717,22 +727,24 @@ function chatBubble(who, message, undoable = false) {
 
 function closeChat() {
   cancelVoice();
+  chatDone = null;
   chatLoad++;
   $("chat").hidden = true;
   chatStatus();
 }
 
-async function openChat(num = null, record = false) {
+async function openChat(num = null, record = false, done = null) {
   if (!inTelegram && !webKey) return needKey("Здесь планер открывается по личной ссылке.");
   const t = num == null ? null : findTask(num);
   if (num != null && !t) return;
   cancelVoice();
   const load = ++chatLoad;
   chatContext = num;
-  $("chatTitle").textContent = t ? `Задача #${num}` : "Планер";
-  $("chatSubtitle").textContent = t?.title ?? "Общий диалог";
-  $("chatText").placeholder = t ? "Что сделать с этой задачей?" : "Написать планеру…";
-  $("chatText").maxLength = t ? 1500 : 2000;
+  chatDone = done;
+  $("chatTitle").textContent = done ? `После задачи #${done.num}` : t ? `Задача #${num}` : "Планер";
+  $("chatSubtitle").textContent = done?.title ?? t?.title ?? "Общий диалог";
+  $("chatText").placeholder = done ? "Изменить её или поставить следующую…" : t ? "Что сделать с этой задачей?" : "Написать планеру…";
+  $("chatText").maxLength = done || t ? 1500 : 2000;
   $("chatText").value = "";
   $("chatText").disabled = false;
   $("chatMic").disabled = false;
@@ -743,14 +755,14 @@ async function openChat(num = null, record = false) {
   if (record) startVoice();
   else $("chatText").focus();
   try {
-    const r = await call({ op: "history", ...(num == null ? {} : { num }) });
+    const r = await call({ op: "history", ...(done ? { done_num: done.num } : num == null ? {} : { num }) });
     if (load !== chatLoad) return;
     for (const m of r.messages) {
-      const said = t ? String(m.text).replace(/^По задаче #\d+ «[^»]*»: /, "") : m.text;
+      const said = done || t ? String(m.text).replace(/^(?:По задаче|После завершения задачи) #\d+ «[^»]*»: /, "") : m.text;
       chatBubble("user", said);
       chatBubble("agent", m.reply);
     }
-    if (!r.messages.length) chatBubble("empty", t ? "Спроси о задаче или продиктуй изменение." : "Напиши или скажи, что нужно сделать.");
+    if (!r.messages.length) chatBubble("empty", done ? "Задача завершена. Можно уточнить её или поставить следующую." : t ? "Спроси о задаче или продиктуй изменение." : "Напиши или скажи, что нужно сделать.");
     if (!voiceSession && $("chatStatus").textContent === "Загружаю диалог…") chatStatus();
   } catch (e) {
     if (load === chatLoad) chatStatus(e.message);
@@ -762,13 +774,15 @@ async function sendChat() {
   const text = field.value.trim();
   if (!text || $("chatSend").disabled) return;
   const num = chatContext;
+  const done = chatDone;
   const load = chatLoad;
   $("chatSend").disabled = true;
   $("chatMic").disabled = true;
   field.disabled = true;
   chatStatus("Планер отвечает…");
   try {
-    const r = await call({ op: num == null ? "say" : "task_say", ...(num == null ? {} : { num }), text });
+    const said = done ? `После завершения задачи #${done.num} «${done.title}»: ${text}` : text;
+    const r = await call({ op: num == null ? "say" : "task_say", ...(num == null ? {} : { num }), text: said });
     if (r.state) S = r.state;
     else S = r;
     render();
@@ -837,7 +851,7 @@ async function startVoice() {
       }
     };
     recorder.start();
-    chatStatus(num == null ? "Записываю. Нажми микрофон ещё раз, чтобы закончить." : "Записываю о выбранной задаче. Нажми микрофон ещё раз, чтобы закончить.");
+    chatStatus(chatDone ? "Записываю после завершения задачи. Нажми микрофон ещё раз, чтобы закончить." : num == null ? "Записываю. Нажми микрофон ещё раз, чтобы закончить." : "Записываю о выбранной задаче. Нажми микрофон ещё раз, чтобы закончить.");
     v.timer = setTimeout(stopVoice, 300_000);
   } catch (e) {
     v.stream?.getTracks().forEach((track) => track.stop());
