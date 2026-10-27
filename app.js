@@ -72,6 +72,25 @@ async function call(body) {
   return json;
 }
 
+async function transcribeTask(num, audio) {
+  const form = new FormData();
+  form.append("op", "transcribe_task");
+  form.append("num", String(num));
+  form.append("audio", audio);
+  const res = await fetch(API, {
+    method: "POST",
+    headers: inTelegram ? { "x-telegram-init-data": tg.initData } : webKey ? { "x-web-key": webKey } : {},
+    body: form,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (res.status === 401 && !inTelegram) {
+    closeSheet();
+    needKey("Ссылка больше не действует.");
+  }
+  if (!res.ok) throw new Error(json.error || "Не получилось распознать запись.");
+  return json.text;
+}
+
 let toastTimer;
 function toast(text, undo) {
   const el = $("toast");
@@ -140,7 +159,7 @@ function taskRow(t, where) {
     <div class="body" data-act="toggle" data-num="${t.num}">
       <div class="title">${esc(t.title)}</div>${meta(t, { showDate: where === "later" || where === "project" })}
       ${isOpen ? `<div class="more">${steps}${t.notes ? `<p class="note">${esc(t.notes)}</p>` : ""}<div class="acts">${acts.join("")}</div></div>` : ""}
-    </div>${MOUSE ? `<button class="copy" data-act="copy" data-num="${t.num}" title="Скопировать" aria-label="Скопировать текст задачи">${COPY}</button>` : ""}</div>`;
+    </div><button class="voice-quick" data-act="voice" data-num="${t.num}" title="Сказать о задаче" aria-label="Сказать планеру о задаче ${esc(t.title)}">🎙</button>${MOUSE ? `<button class="copy" data-act="copy" data-num="${t.num}" title="Скопировать" aria-label="Скопировать текст задачи">${COPY}</button>` : ""}</div>`;
 }
 
 const cardOf = (rows) => (rows.length ? `<div class="card">${rows.join("")}</div>` : "");
@@ -638,6 +657,7 @@ document.addEventListener("click", (e) => {
   if (act === "op") return void run({ op, num: Number(num) });
   if (act === "move") return void run({ op: "move", num: Number(num), date });
   if (act === "optional") return void run({ op: "optional", num: Number(num), value: el.dataset.value === "1" });
+  if (act === "voice") return void openVoiceSheet(Number(num));
   if (act === "split") return void run({ op: "say", text: `разбей ${num} на шаги` });
   if (act === "plan") return void run({ op: "say", text: `распланируй день ${date}` });
 });
@@ -653,9 +673,86 @@ function findTask(num) {
   return all.find((t) => t.num === num) ?? all.flatMap((t) => t.steps.map((s) => ({ ...s, steps: [] }))).find((s) => s.num === num);
 }
 
+let voiceSession = null;
+
+function cancelVoice() {
+  const v = voiceSession;
+  voiceSession = null;
+  if (!v) return;
+  clearTimeout(v.timer);
+  if (v.recorder?.state === "recording") v.recorder.stop();
+  v.stream?.getTracks().forEach((track) => track.stop());
+}
+
 function closeSheet() {
+  cancelVoice();
   $("sheet").hidden = true;
   $("veil").hidden = true;
+}
+
+async function openVoiceSheet(num) {
+  const t = findTask(num);
+  if (!t) return;
+  cancelVoice();
+  $("sheet").innerHTML = `<h3>Сказать о задаче #${num}</h3><p class="voice-task">${esc(t.title)}</p>
+    <p class="voice-status" id="voiceStatus" role="status">Разреши доступ к микрофону…</p>
+    <label class="voice-draft" id="voiceDraft" hidden>Проверь, что я услышал<textarea id="voiceText" rows="4" maxlength="1500"></textarea></label>
+    <div class="grid"><button class="wide go" data-sheet="voice-stop" id="voiceStop" disabled>Остановить запись</button>
+      <button class="wide go" data-sheet="voice-send" id="voiceSend" hidden>Отправить агенту</button>
+      <button class="wide cancel" data-sheet="close">Отмена</button></div>`;
+  $("sheet").dataset.num = num;
+  $("sheet").hidden = false;
+  $("veil").hidden = false;
+  const v = { num, stream: null, recorder: null, timer: null, chunks: [], send: false };
+  voiceSession = v;
+  try {
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) throw new Error("Микрофон недоступен в этом браузере.");
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (voiceSession !== v) return void stream.getTracks().forEach((track) => track.stop());
+    v.stream = stream;
+    const mime = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm"].find((x) => MediaRecorder.isTypeSupported(x));
+    const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    v.recorder = recorder;
+    recorder.ondataavailable = (e) => { if (e.data.size) v.chunks.push(e.data); };
+    recorder.onstop = async () => {
+      v.stream?.getTracks().forEach((track) => track.stop());
+      if (voiceSession !== v || !v.send) return;
+      const type = recorder.mimeType.split(";")[0] || v.chunks[0]?.type.split(";")[0];
+      if (!["audio/webm", "audio/mp4"].includes(type)) return void ($("voiceStatus").textContent = "Этот формат записи не поддерживается. Попробуй другой браузер.");
+      const audio = new File(v.chunks, `voice.${type === "audio/mp4" ? "mp4" : "webm"}`, { type });
+      if (audio.size < 100 || audio.size > 8_000_000) return void ($("voiceStatus").textContent = "Запись пуста или больше 8 МБ. Попробуй короче.");
+      try {
+        $("voiceStatus").textContent = "Распознаю речь…";
+        const text = await transcribeTask(num, audio);
+        if (voiceSession !== v) return;
+        if (!text?.trim()) return void ($("voiceStatus").textContent = "Ничего не расслышал. Попробуй ещё раз.");
+        $("voiceStatus").textContent = "Исправь текст, если нужно, затем отправь.";
+        $("voiceText").value = text.slice(0, 1500);
+        $("voiceDraft").hidden = false;
+        $("voiceSend").hidden = false;
+        $("voiceText").focus();
+      } catch (e) {
+        if (voiceSession === v) $("voiceStatus").textContent = e.message;
+      }
+    };
+    recorder.start();
+    $("voiceStatus").textContent = "Записываю. Говори о выбранной задаче.";
+    $("voiceStop").disabled = false;
+    v.timer = setTimeout(stopVoice, 300_000);
+  } catch (e) {
+    v.stream?.getTracks().forEach((track) => track.stop());
+    if (voiceSession === v) $("voiceStatus").textContent = e.name === "NotAllowedError" ? "Разреши микрофон для планера в настройках браузера." : e.message;
+  }
+}
+
+function stopVoice() {
+  const v = voiceSession;
+  if (!v || v.recorder?.state !== "recording") return;
+  clearTimeout(v.timer);
+  v.send = true;
+  $("voiceStop").disabled = true;
+  $("voiceStatus").textContent = "Завершаю запись…";
+  v.recorder.stop();
 }
 
 function openSheet(num) {
@@ -869,7 +966,7 @@ function dropHold() {
 document.addEventListener("pointerdown", (e) => {
   const row = e.target.closest(".row.task");
   // Not on the checkbox, and not inside the expanded part with its own buttons.
-  if (!row || e.target.closest(".check, .more") || !S) return;
+  if (!row || e.target.closest(".check, .more, .voice-quick, .copy") || !S) return;
   dropHold();
   hold = { x: e.clientX, y: e.clientY, row, timer: setTimeout(() => {
     const num = Number(row.dataset.num);
@@ -890,7 +987,7 @@ document.addEventListener("contextmenu", (e) => {
   const row = e.target.closest(".row.task");
   if (!row) return;
   e.preventDefault();
-  if (MOUSE && S && $("sheet").hidden && !e.target.closest(".check, .more")) {
+  if (MOUSE && S && $("sheet").hidden && !e.target.closest(".check, .more, .voice-quick, .copy")) {
     dropHold();
     openSheet(Number(row.dataset.num));
   }
@@ -908,6 +1005,13 @@ document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-sheet]");
   if (!b) return;
   const num = Number($("sheet").dataset.num);
+  if (b.dataset.sheet === "voice-stop") return stopVoice();
+  if (b.dataset.sheet === "voice-send") {
+    const text = $("voiceText")?.value.trim();
+    if (!text) return toast("Скажи или напиши, что передать агенту.");
+    closeSheet();
+    return void run({ op: "task_say", num, text });
+  }
   // The schedule sheet keeps open while it is being filled in.
   if (b.dataset.sheet === "rkind" || b.dataset.sheet === "rday") {
     readRoutineInputs();
