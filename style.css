@@ -214,6 +214,8 @@ h2 span { text-transform: none; letter-spacing: 0; font-weight: 500; }
 .chat-bubble.user { align-self: flex-end; background: var(--accent); color: var(--on-accent); border-bottom-right-radius: 5px; }
 .chat-bubble.agent { align-self: flex-start; background: var(--card); color: var(--text); border-bottom-left-radius: 5px; }
 .chat-bubble.empty { align-self: center; max-width: 90%; background: none; color: var(--muted); text-align: center; }
+.chat-undo { display: block; margin-top: 8px; color: var(--accent); font-size: 13px; font-weight: 600; text-decoration: underline; }
+.chat-undo:disabled { opacity: .5; }
 .chat-status { margin: 0; padding: 7px 14px; text-align: center; color: var(--muted); font-size: 13px; }
 .chat-status[hidden] { display: none; }
 .chat-compose { display: flex; align-items: end; gap: 8px; padding: 8px max(10px, calc((100vw - 740px) / 2)) calc(8px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }

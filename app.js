@@ -699,10 +699,17 @@ function chatStatus(message = "") {
   $("chatStatus").hidden = !message;
 }
 
-function chatBubble(who, message) {
+function chatBubble(who, message, undoable = false) {
   const bubble = document.createElement("div");
   bubble.className = `chat-bubble ${who}`;
   bubble.textContent = message;
+  if (undoable) {
+    const undo = document.createElement("button");
+    undo.type = "button";
+    undo.className = "chat-undo";
+    undo.textContent = "Отменить изменение";
+    bubble.append(undo);
+  }
   $("chatMessages").append(bubble);
   $("chatMessages").scrollTop = $("chatMessages").scrollHeight;
 }
@@ -726,6 +733,7 @@ async function openChat(num = null, record = false) {
   $("chatText").maxLength = t ? 1500 : 2000;
   $("chatText").value = "";
   $("chatText").disabled = false;
+  $("chatMic").disabled = false;
   $("chatSend").disabled = true;
   $("chatMessages").replaceChildren();
   $("chat").hidden = false;
@@ -754,6 +762,7 @@ async function sendChat() {
   const num = chatContext;
   const load = chatLoad;
   $("chatSend").disabled = true;
+  $("chatMic").disabled = true;
   field.disabled = true;
   chatStatus("Планер отвечает…");
   try {
@@ -762,12 +771,12 @@ async function sendChat() {
     else S = r;
     render();
     if (load === chatLoad) {
+      $("chatMessages").querySelectorAll(".chat-undo").forEach((button) => button.remove());
       chatBubble("user", text);
-      chatBubble("agent", r.reply || "Готово.");
+      chatBubble("agent", r.reply || "Готово.", !!r.undoable);
       field.value = "";
       chatStatus();
     }
-    if (r.undoable) toast("Изменение можно отменить.", true);
     tg?.HapticFeedback?.notificationOccurred("success");
   } catch (e) {
     if (load === chatLoad) chatStatus(e.message);
@@ -775,6 +784,7 @@ async function sendChat() {
   } finally {
     if (load === chatLoad) {
       field.disabled = false;
+      $("chatMic").disabled = false;
       $("chatSend").disabled = !field.value.trim();
       field.focus();
     }
@@ -782,6 +792,7 @@ async function sendChat() {
 }
 
 async function startVoice() {
+  if ($("chatMic").disabled) return;
   if (voiceSession?.recorder?.state === "recording") return stopVoice();
   if (voiceSession) return;
   const num = chatContext;
@@ -1149,6 +1160,26 @@ $("chatText").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(); }
 });
 $("chatCompose").addEventListener("submit", (e) => { e.preventDefault(); sendChat(); });
+$("chatMessages").addEventListener("click", async (e) => {
+  const button = e.target.closest(".chat-undo");
+  if (!button) return;
+  const load = chatLoad;
+  button.disabled = true;
+  chatStatus("Отменяю изменение…");
+  try {
+    const r = await call({ op: "undo" });
+    if (r.state) S = r.state;
+    else S = r;
+    render();
+    if (load === chatLoad) {
+      $("chatMessages").querySelectorAll(".chat-undo").forEach((item) => item.remove());
+      chatBubble("agent", r.reply || "Изменение отменено.");
+      chatStatus();
+    }
+  } catch (error) {
+    if (load === chatLoad) { button.disabled = false; chatStatus(error.message); }
+  }
+});
 
 // Fresh when the app comes back to the front: the chat may have changed things meanwhile.
 document.addEventListener("visibilitychange", () => {
