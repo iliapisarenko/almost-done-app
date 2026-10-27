@@ -741,7 +741,7 @@ async function openChat(num = null, record = false) {
       chatBubble("agent", m.reply);
     }
     if (!r.messages.length) chatBubble("empty", t ? "Спроси о задаче или продиктуй изменение." : "Напиши или скажи, что нужно сделать.");
-    if (!voiceSession) chatStatus();
+    if (!voiceSession && $("chatStatus").textContent === "Загружаю диалог…") chatStatus();
   } catch (e) {
     if (load === chatLoad) chatStatus(e.message);
   }
