@@ -713,7 +713,21 @@ function chatStatus(message = "") {
 function chatBubble(who, message, undoable = false) {
   const bubble = document.createElement("div");
   bubble.className = `chat-bubble ${who}`;
-  bubble.textContent = message;
+  if (who === "agent") {
+    const url = /https:\/\/[^\s<>"']+/g;
+    let start = 0;
+    for (const match of message.matchAll(url)) {
+      bubble.append(document.createTextNode(message.slice(start, match.index)));
+      const link = document.createElement("a");
+      link.href = match[0];
+      link.textContent = match[0];
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      bubble.append(link);
+      start = match.index + match[0].length;
+    }
+    bubble.append(document.createTextNode(message.slice(start)));
+  } else bubble.textContent = message;
   if (undoable) {
     const undo = document.createElement("button");
     undo.type = "button";
