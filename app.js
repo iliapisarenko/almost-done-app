@@ -169,13 +169,96 @@ function taskRow(t, where) {
 
 const cardOf = (rows) => (rows.length ? `<div class="card">${rows.join("")}</div>` : "");
 
+// ---------- periods: date ranges that change the room for tasks ----------
+const PERIOD_KINDS = { trip: "Поездка", guests: "Гости", rest: "Отдых", work: "Интенсивная работа" };
+const PERIOD_LOAD = { normal: "Обычная нагрузка", reduced: "Сниженная нагрузка", essential: "Только обязательное" };
+const periodMode = (value) => Object.hasOwn(PERIOD_LOAD, value) ? value : "normal";
+const periodDate = (date) => date ? `${date.slice(8)}.${date.slice(5, 7)}.${date.slice(0, 4)}` : "конец пока неизвестен";
+const periodRange = (p) => `${periodDate(p.startDate)} — ${periodDate(p.endDate)}`;
+const periodsOn = (date) => (S.periods ?? []).filter((p) => p.startDate <= date && (!p.endDate || p.endDate >= date));
+const periodLoadOn = (date) => periodsOn(date).reduce((mode, p) => ({ normal: 0, reduced: 1, essential: 2 })[periodMode(p.availability)] > ({ normal: 0, reduced: 1, essential: 2 })[mode] ? periodMode(p.availability) : mode, "normal");
+const periodHint = (mode) => mode === "essential"
+  ? "Автораскладка не добавляет новые дела. Уже назначенные задачи и сроки остаются на месте."
+  : mode === "reduced" ? "Для новых дел остаётся половина обычных окон. Уже назначенные задачи и сроки остаются на месте."
+  : "Обычные окна для дел сохраняются.";
+
+function periodBadge(p, interactive = true) {
+  const tag = interactive ? "button" : "span";
+  return `<${tag} class="period-badge ${periodMode(p.availability)}" ${interactive ? `data-act="period" data-id="${esc(p.id)}" type="button"` : ""} title="${esc(`${PERIOD_KINDS[p.kind] ?? "Период"} · ${periodRange(p)} · ${PERIOD_LOAD[periodMode(p.availability)]}`)}">${esc(p.title)}</${tag}>`;
+}
+
+function periodContext(date) {
+  const periods = periodsOn(date);
+  if (!periods.length) return "";
+  const mode = periodLoadOn(date);
+  return `<section class="period-context" aria-label="Периоды на этот день"><div class="period-badges">${periods.map((p) => periodBadge(p)).join("")}</div>
+    <p><b>${PERIOD_LOAD[mode]}.</b> ${periodHint(mode)}${periods.length > 1 ? " При пересечении действует более низкая нагрузка." : ""}</p></section>`;
+}
+
+function periodSection() {
+  const periods = [...(S.periods ?? [])].sort((a, b) => a.startDate.localeCompare(b.startDate) || a.title.localeCompare(b.title));
+  return `<h2>Периоды <span>· ${periods.length}</span></h2>
+    <p class="sum">Поездки, гости и другие периоды меняют доступное время на несколько дней.</p>
+    ${periods.length ? `<div class="card">${periods.map((p) => `<button class="mem tap period-row ${periodMode(p.availability)}" data-act="period" data-id="${esc(p.id)}"><div><b>${esc(p.title)}</b><small>${esc(periodRange(p))}</small><p>${esc(PERIOD_KINDS[p.kind] ?? "Период")} · ${PERIOD_LOAD[periodMode(p.availability)]}${p.endDate && p.endDate < S.today ? " · завершён" : ""}</p></div><span class="chev">›</span></button>`).join("")}</div>` : ""}
+    <button class="big ghost" data-act="period">＋ Добавить период</button>`;
+}
+
+let periodEditing = null;
+function openPeriodSheet(id = null, date = S.today) {
+  const p = id ? (S.periods ?? []).find((x) => x.id === id) : null;
+  if (id && !p) return toast("Период больше не найден. Обнови страницу.");
+  periodEditing = p?.id ?? null;
+  $("sheet").innerHTML = `<h3>${p ? "Изменить период" : "Новый период"}</h3>
+    <label class="flabel">Название<input class="field" id="periodTitle" type="text" maxlength="120" required placeholder="Например, поездка в Рим" value="${esc(p?.title ?? "")}"></label>
+    <label class="flabel">Тип<select class="field" id="periodKind">${Object.entries(PERIOD_KINDS).map(([key, label]) => `<option value="${key}" ${(p?.kind ?? "trip") === key ? "selected" : ""}>${label}</option>`).join("")}</select></label>
+    <div class="period-dates"><label class="flabel">Начало<input class="field" id="periodStart" type="date" required value="${esc(p?.startDate ?? date)}"></label>
+      <label class="flabel">Окончание включительно<input class="field" id="periodEnd" type="date" min="${esc(p?.startDate ?? date)}" value="${esc(p?.endDate ?? "")}"></label></div>
+    <p class="note">Оставь окончание пустым, если дата возвращения пока неизвестна.</p>
+    <label class="flabel">Доступная нагрузка<select class="field" id="periodAvailability">${Object.entries(PERIOD_LOAD).map(([key, label]) => `<option value="${key}" ${(p?.availability ?? "reduced") === key ? "selected" : ""}>${label}</option>`).join("")}</select></label>
+    <p class="note" id="periodHint">${periodHint(p?.availability ?? "reduced")}</p>
+    <p class="note">При пересечении периодов действует более низкая нагрузка.</p>
+    <p class="period-error" id="periodError" role="alert" hidden></p>
+    <div class="grid"><button class="wide go" data-sheet="period-save">Сохранить</button>
+      ${p ? '<button class="wide danger" data-sheet="period-delete">Удалить период</button>' : ""}
+      <button class="wide cancel" data-sheet="close">Отмена</button></div>`;
+  $("sheet").dataset.num = "";
+  $("sheet").hidden = false;
+  $("veil").hidden = false;
+}
+
+async function changePeriod(remove = false) {
+  const title = $("periodTitle")?.value.trim(), start = $("periodStart")?.value, end = $("periodEnd")?.value || null;
+  const error = $("periodError");
+  const fail = (message) => { error.textContent = message; error.hidden = false; };
+  if (!remove && (!title || !start)) return fail("Укажи название и дату начала.");
+  if (!remove && end && end < start) return fail("Окончание должно быть не раньше начала.");
+  if (remove && !periodEditing) return;
+  const body = remove ? { op: "period_delete", id: periodEditing } : { op: "period_save", ...(periodEditing ? { id: periodEditing } : {}), title, start_date: start, end_date: end, kind: $("periodKind").value, availability: $("periodAvailability").value };
+  document.body.classList.add("busy");
+  error.hidden = true;
+  try {
+    const r = await call(body);
+    if (r.state) S = r.state;
+    closeSheet();
+    tg?.HapticFeedback?.notificationOccurred("success");
+    if (r.reply) toast(r.reply, !!r.undoable);
+    render();
+  } catch (e) {
+    // Keep every field in place, so a failed request never erases the draft.
+    fail(e.message || "Не получилось сохранить период. Попробуй ещё раз.");
+    tg?.HapticFeedback?.notificationOccurred("error");
+  } finally {
+    document.body.classList.remove("busy");
+  }
+}
+
 // ---------- tabs ----------
 
 function viewDay() {
   const d = S.days[dayIx];
   const strip = S.days.map((x, i) => {
     const [w, n] = x.sub.split(" ");
-    return `<button class="chip ${i === dayIx ? "on" : ""} ${x.tasks.length ? "has" : ""} ${x.off ? "off" : ""}" data-act="day" data-ix="${i}">${esc(w)}<b>${esc(n)}</b><i></i></button>`;
+    return `<button class="chip ${i === dayIx ? "on" : ""} ${x.tasks.length ? "has" : ""} ${x.off ? "off" : ""} ${periodsOn(x.date).length ? "has-period" : ""}" data-act="day" data-ix="${i}" title="${esc(periodsOn(x.date).map((p) => p.title).join(" · "))}">${esc(w)}<b>${esc(n)}</b><i></i></button>`;
   }).join("");
   const where = dayIx === 0 ? "today" : dayIx === 1 ? "tomorrow" : "day";
   const events = d.events.map((e) => `<div class="row event ${e.routine ? "" : "own"}"><div class="when">${e.start ? `${e.start}–${e.end}` : "весь день"}</div><div class="body"><div class="title">${esc(e.title)}</div></div></div>`);
@@ -188,6 +271,7 @@ function viewDay() {
   const sum = [d.loadMin ? `задач на ~${dur(d.loadMin)}` : "", S.hasWindows ? `свободно в окнах ${dur(d.freeMin)}` : ""].filter(Boolean).join(" · ");
   const over = S.hasWindows && !d.off && loose.reduce((s, t) => s + (t.optional ? 0 : t.est || 30), 0) > d.freeMin;
   return `<div class="strip">${strip}</div>
+    ${periodContext(d.date)}
     ${d.off ? '<p class="sum">Выходной: окон для дел нет, раскладка сюда ничего не ставит. Изменить: «Память» → «Выходные».</p>' : ""}
     ${working.length ? `<h2>В работе <span>· ${working.length}</span></h2>${cardOf(working.map((t) => taskRow(t, "today")))}` : ""}
     ${events.length ? `<h2>В календаре</h2>${cardOf(events)}` : ""}
@@ -196,7 +280,7 @@ function viewDay() {
     ${opt.length ? `<h2>Если останется время</h2>${cardOf(opt.map((t) => taskRow(t, where)))}` : ""}
     ${!d.tasks.length && !working.length ? `<p class="hint">${d.events.length ? "Задач на этот день нет." : "На этот день ничего не стоит."}</p>` : ""}
     ${sum ? `<p class="sum">${sum}${over ? ". Не всё влезает: что-то стоит перенести." : ""}</p>` : ""}
-    ${S.hasWindows ? `<button class="big ${loose.length || !d.tasks.length ? "" : "ghost"}" data-act="plan" data-date="${d.date}">${loose.length ? "Разложить по часам" : d.tasks.length ? "Разложить заново" : "Разложить из запаса"}</button>` : `<p class="sum">Чтобы раскладывать дела по часам, расскажи планеру, когда ты ими занимаешься: «днём с 12 до 17 дела, ночью с 0:30 до 2:30 приложения».</p>`}`;
+    ${periodLoadOn(d.date) === "essential" ? "" : S.hasWindows ? `<button class="big ${loose.length || !d.tasks.length ? "" : "ghost"}" data-act="plan" data-date="${d.date}">${loose.length ? "Разложить по часам" : d.tasks.length ? "Разложить заново" : "Разложить из запаса"}</button>` : `<p class="sum">Чтобы раскладывать дела по часам, расскажи планеру, когда ты ими занимаешься: «днём с 12 до 17 дела, ночью с 0:30 до 2:30 приложения».</p>`}`;
 }
 
 function viewWeek() {
@@ -207,10 +291,11 @@ function viewWeek() {
     const loose = d.tasks.filter((t) => !t.slot && !t.time && !t.optional).reduce((s, t) => s + (t.est || 30), 0);
     const over = S.hasWindows && !d.off && loose > d.freeMin;
     const fixed = d.events.filter((e) => e.start).map((e) => `${e.start} ${esc(e.title)}`).slice(0, 3).join(" · ");
-    const room = d.off ? "выходной, окон для дел нет" : S.hasWindows ? (d.loadMin ? `занято ${dur(d.loadMin)} из ${dur(cap)}` : `свободно ${dur(d.freeMin)}`) : "";
+    const room = d.off ? "выходной, окон для дел нет" : periodLoadOn(d.date) === "essential" ? "только обязательное, без новых дел из автораскладки" : S.hasWindows ? (d.loadMin ? `занято ${dur(d.loadMin)} из ${dur(cap)}` : `свободно ${dur(d.freeMin)}`) : "";
     return `<button class="wk" data-act="day" data-ix="${i}" data-go="1">
       <div class="head"><b>${esc(d.label)}${i < 2 ? `, ${esc(d.sub)}` : ""}</b><span>${d.tasks.length ? `задач: ${d.tasks.length}` : "пусто"}</span></div>
       <div class="bar ${over ? "over" : ""}"><i style="width:${pct}%"></i></div>
+      ${periodsOn(d.date).length ? `<span class="period-badges">${periodsOn(d.date).map((p) => periodBadge(p, false)).join("")}</span>` : ""}
       <p>${over ? "Не всё влезает в окна. " : ""}${room}${fixed ? `${room ? " · " : ""}${fixed}` : ""}</p>
     </button>`;
   }).join("");
@@ -219,7 +304,7 @@ function viewWeek() {
   for (const t of S.done) byDay.set(t.label, [...(byDay.get(t.label) ?? []), t]);
   const done = [...byDay].map(([label, ts]) => `<h2>${esc(label)} <span>· ${ts.length}</span></h2><div class="card">${ts.map((t) =>
     `<div class="row done"><span class="check">${TICK}</span><div class="body"><div class="title">${esc(t.title)}</div>${t.project ? `<div class="meta"><span>${esc(t.project)}</span></div>` : ""}</div><button class="back" data-act="op" data-op="reopen" data-num="${t.num}">Вернуть</button></div>`).join("")}</div>`).join("");
-  return `<p class="sum">Полоска показывает, сколько времени под дела в этом дне уже занято задачами. Оранжевая: не влезает.</p>${days}
+  return `<button class="big ghost" data-act="period">＋ Поездка или другой период</button><p class="sum">Полоска показывает, сколько времени под дела в этом дне уже занято задачами. Оранжевая: не влезает.</p>${days}
     ${waiting(S.later)}
     ${S.done.length ? `<h2 class="sep">Сделано за две недели <span>· ${S.done.length}</span></h2>${done}` : ""}`;
 }
@@ -290,6 +375,7 @@ function viewMemory() {
     ${fixed.length ? `<div class="card">${fixed.map(rt).join("")}</div>` : ""}
     ${win.length ? `<h2>Окна для дел</h2><div class="card">${win.map(rt).join("")}</div>` : ""}
     <button class="big ghost" data-act="routine" data-num="">＋ Добавить в расписание</button>
+    ${periodSection()}
     ${offSection()}
     ${tracks}
     <h2>Про тебя</h2>${noteList(S.about, "")}
@@ -530,13 +616,18 @@ function viewLine() {
     if (t.date && t.date !== t.deadline) put(name, t.date < S.today ? S.today : t.date, "task", t);
     if (t.deadline) put(name, t.deadline < S.today ? S.today : t.deadline, "dl", t);
   }
-  if (!rows.size) return '<p class="hint">На четыре недели вперёд ничего не стоит.</p>';
+  const visiblePeriods = (S.periods ?? []).filter((p) => p.startDate <= dates.at(-1) && (!p.endDate || p.endDate >= S.today));
+  if (!rows.size && !visiblePeriods.length) return '<p class="hint">На четыре недели вперёд ничего не стоит.</p>';
   const order = [...rows].sort((a, b) => (a[0] === "" ? 1 : b[0] === "" ? -1 : [...b[1].values()].flat().length - [...a[1].values()].flat().length));
   const head = dates.map((d, i) => {
     const x = new Date(`${d}T12:00:00Z`);
     const first = i === 0 || x.getUTCDate() === 1;
     return `<i class="${offs.has(d) ? "off" : ""} ${d === S.today ? "today" : ""}">${first ? `<em>${MONTHS[x.getUTCMonth()].slice(0, 3)}</em>` : ""}${["вс", "пн", "вт", "ср", "чт", "пт", "сб"][x.getUTCDay()]}<b>${x.getUTCDate()}</b></i>`;
   }).join("");
+  const periodRows = visiblePeriods.map((p) => `<button class="lname lperiod-name" data-act="period" data-id="${esc(p.id)}" title="${esc(`${p.title} · ${periodRange(p)}`)}">${esc(p.title)}</button>` + dates.map((date) => {
+    const active = p.startDate <= date && (!p.endDate || p.endDate >= date);
+    return active ? `<button class="lperiod-cell ${periodMode(p.availability)} ${date === p.startDate || date === S.today ? "first" : ""} ${date === p.endDate || date === dates.at(-1) ? "last" : ""}" data-act="period" data-id="${esc(p.id)}" aria-label="${esc(`${p.title}, ${periodDate(date)}, ${PERIOD_LOAD[periodMode(p.availability)]}`)}" data-tip="${esc(`${p.title} · ${PERIOD_LOAD[periodMode(p.availability)]} · ${periodRange(p)}`)}"></button>` : '<div class="lperiod-empty"></div>';
+  }).join("")).join("");
   const body = order.map(([name, cells]) => `<div class="lname" title="${esc(name || "Без проекта")}">${esc(name || "Без проекта")}</div>` + dates.map((d) => {
     const c = cells.get(d) ?? [];
     const tip = c.map((x) => `${x.kind === "dl" ? "срок: " : x.t.after ? "ждёт: " : ""}${x.t.title}`).join(" · ");
@@ -544,7 +635,7 @@ function viewLine() {
     return `<div class="lcell ${offs.has(d) ? "off" : ""} ${d === S.today ? "today" : ""}" ${tip ? `data-tip="${esc(tip)}"` : ""}>${marks}</div>`;
   }).join("")).join("");
   return `<p class="sum">Четыре недели вперёд по проектам. Точка: задача на этот день, ромб: срок, полая точка: ждёт другую задачу. Наведи, чтобы увидеть названия.</p>
-    <div class="line"><div class="lgrid" style="--days:${DAYS}"><div class="lname head"></div>${head}${body}</div></div>
+    <div class="line"><div class="lgrid" style="--days:${DAYS}"><div class="lname head"></div>${head}${periodRows}${body}</div></div>
     <div class="vkey"><span><i class="lm task"></i>задача</span><span><i class="lm hot"></i>срочная</span><span><i class="lm work"></i>в работе</span><span><i class="lm dl"></i>срок</span><span><i class="lm held"></i>ждёт другую</span><span><i class="sw offsw"></i>выходной</span></div>`;
 }
 
@@ -609,6 +700,7 @@ document.addEventListener("click", (e) => {
     return void run({ op: "note_add", text, project: input.dataset.noteFor ? Number(input.dataset.noteFor) : null });
   }
   if (act === "since") return void loadChanges(date);
+  if (act === "period") return openPeriodSheet(el.dataset.id || null, date || S.today);
   if (act === "routine") return openRoutineSheet(num ? Number(num) : null);
   if (act === "offwd") return void run({ op: "off_weekday", day: el.dataset.day, value: !S.off.weekdays.includes(el.dataset.day) });
   if (act === "offdel") return void run({ op: "off_date", date, value: false });
@@ -936,8 +1028,9 @@ function openCalendarSheet(num, month) {
   const cells = Array.from({ length }, (_, i) => {
     const d = `${month}-${String(i + 1).padStart(2, "0")}`;
     if (d < S.today) return `<span class="past">${i + 1}</span>`;
-    const n = busy.get(d);
-    return `<button data-sheet="move" data-date="${d}" class="${d === S.today ? "today" : ""} ${d === picked ? "on" : ""}" title="${n ? `задач: ${n}` : ""}">${i + 1}${n ? "<em></em>" : ""}</button>`;
+    const n = busy.get(d), periods = periodsOn(d);
+    const tip = [n ? `задач: ${n}` : "", ...periods.map((p) => `${p.title}: ${PERIOD_LOAD[periodMode(p.availability)]}`)].filter(Boolean).join(" · ");
+    return `<button data-sheet="move" data-date="${d}" class="${d === S.today ? "today" : ""} ${d === picked ? "on" : ""} ${periods.length ? `cal-period ${periodLoadOn(d)}` : ""}" title="${esc(tip)}" aria-label="${esc(`${periodDate(d)}${tip ? ` · ${tip}` : ""}`)}">${i + 1}${n ? "<em></em>" : ""}${periods.length ? `<small class="cal-period-count">${periods.length > 1 ? periods.length : "▰"}</small>` : ""}</button>`;
   });
   $("sheet").innerHTML = `<h3>${esc(t.title)}</h3>
     <div class="calhead">
@@ -946,6 +1039,7 @@ function openCalendarSheet(num, month) {
       <button data-sheet="calmonth" data-m="${shift(1)}" aria-label="Следующий месяц">›</button>
     </div>
     <div class="calgrid">${["пн", "вт", "ср", "чт", "пт", "сб", "вс"].map((w) => `<i>${w}</i>`).join("")}${"<span></span>".repeat(lead)}${cells.join("")}</div>
+    <div class="calendar-periods">${(S.periods ?? []).filter((p) => p.startDate <= `${month}-${String(length).padStart(2, "0")}` && (!p.endDate || p.endDate >= `${month}-01`)).map((p) => `<p><b>${esc(p.title)}</b> · ${esc(periodRange(p))}<br>${PERIOD_LOAD[periodMode(p.availability)]}</p>`).join("")}</div>
     <div class="grid"><button class="wide cancel" data-sheet="calback">Назад</button></div>`;
   $("sheet").dataset.num = num;
 }
@@ -1138,6 +1232,8 @@ document.addEventListener("click", (e) => {
   if (!b) return;
   const num = Number($("sheet").dataset.num);
   // The schedule sheet keeps open while it is being filled in.
+  if (b.dataset.sheet === "period-save") return void changePeriod();
+  if (b.dataset.sheet === "period-delete") return void changePeriod(true);
   if (b.dataset.sheet === "rkind" || b.dataset.sheet === "rday") {
     readRoutineInputs();
     if (b.dataset.sheet === "rkind") rdraft.kind = b.dataset.v;
@@ -1178,6 +1274,8 @@ document.addEventListener("click", (e) => {
 }, true);
 
 document.addEventListener("change", (e) => {
+  if (e.target.id === "periodStart") $("periodEnd").min = e.target.value;
+  if (e.target.id === "periodAvailability") $("periodHint").textContent = periodHint(e.target.value);
   // A year typed digit by digit passes through dates like 0002-10-20: only a real day from today on is sent.
   if (e.target.id === "offDate" && /^\d{4}-\d{2}-\d{2}$/.test(e.target.value) && e.target.value >= S.today) run({ op: "off_date", date: e.target.value, value: true });
 });

@@ -345,3 +345,36 @@ h2.sep { margin-top: 26px; }
 .sheet .times input { position: static; inset: auto; width: auto; height: auto; opacity: 1; }
 
 .sheet .dial button:disabled { opacity: .3; }
+
+/* Named date ranges: use text as well as colour, and keep every overlap visible. */
+.period-badges { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0; }
+.period-badge { display: inline-block; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 7px; padding: 4px 8px; background: var(--card); color: var(--text); font-size: 12px; font-weight: 600; text-align: left; overflow-wrap: anywhere; }
+.period-badge.reduced, .period-row.reduced { border-left-color: var(--warn); }
+.period-badge.essential, .period-row.essential { border-left-color: #9664bd; }
+.period-context { margin: 12px 0; padding: 1px 12px 9px; background: var(--card); border-radius: 12px; }
+.period-context p { margin: 4px 0 0; font-size: 12px; color: var(--muted); line-height: 1.45; }
+.period-context b { color: var(--text); font-weight: 500; }
+.period-row { border-left: 3px solid var(--accent); }
+.period-row small { display: block; margin-top: 3px; }
+.chip.has-period { border-bottom: 3px solid var(--warn); }
+.period-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.period-dates label, .period-dates input { min-width: 0; }
+.sheet .period-dates .field { min-height: 44px; }
+.sheet select.field { appearance: auto; }
+.period-error { color: #c33d35; margin: 8px 4px; font-size: 13px; }
+.period-error[hidden] { display: none; }
+.calendar-periods { max-height: 140px; overflow-y: auto; }
+.calendar-periods p { margin: 5px 4px 9px; font-size: 12px; line-height: 1.4; color: var(--muted); overflow-wrap: anywhere; }
+.calendar-periods b { color: var(--text); }
+.sheet .calgrid .cal-period { border-bottom: 3px solid var(--accent); }
+.sheet .calgrid .cal-period.reduced { border-bottom-color: var(--warn); }
+.sheet .calgrid .cal-period.essential { border-bottom-color: #9664bd; }
+.sheet .calgrid .cal-period-count { position: absolute; right: 4px; bottom: 2px; margin: 0; font-size: 9px; line-height: 1; color: inherit; }
+.lperiod-name { text-align: left; color: var(--text); font-weight: 600; }
+.lperiod-cell { min-height: 25px; margin: 6px -1px; background: color-mix(in srgb, var(--accent) 30%, var(--card)); }
+.lperiod-cell.reduced { background: color-mix(in srgb, var(--warn) 35%, var(--card)); }
+.lperiod-cell.essential { background: color-mix(in srgb, #9664bd 35%, var(--card)); }
+.lperiod-cell.first { border-radius: 6px 0 0 6px; }
+.lperiod-cell.last { border-radius: 0 6px 6px 0; }
+.lperiod-cell.first.last { border-radius: 6px; }
+.period-badge:focus-visible, .lperiod-cell:focus-visible, .lperiod-name:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
