@@ -128,7 +128,7 @@ async function run(body, { quiet = false } = {}) {
 
 function meta(t, { showDate = false } = {}) {
   const bits = [];
-  // Only the most pressing tasks carry the word; the rest are simply higher or lower in the list.
+  if (t.focus) bits.push('<span class="focus-label">🟨 Главное</span>');
   if (t.working) bits.push('<span class="work">в работе</span>');
   if (t.urgent) bits.push('<span class="hot">срочно</span>');
   if (t.waiting) bits.push(`<span class="wait">жду: ${esc(t.waiting)}</span>`);
@@ -153,13 +153,14 @@ function taskRow(t, where) {
   if (where !== "tomorrow") acts.push(`<button data-act="move" data-num="${t.num}" data-date="${S.days[1].date}">Завтра</button>`);
   if (where !== "backlog" && where !== "someday") acts.push(`<button data-act="op" data-op="undate" data-num="${t.num}">В запас</button>`);
   if (where !== "someday") acts.push(`<button data-act="op" data-op="someday" data-num="${t.num}">Когда-нибудь</button>`);
+  acts.push(focusButton(t));
   acts.push(`<button data-act="optional" data-num="${t.num}" data-value="${t.optional ? "0" : "1"}">${t.optional ? "Обязательно" : "Необязательно"}</button>`);
   acts.push(`<button data-act="split" data-num="${t.num}">Разбить</button>`);
   acts.push(`<button class="danger" data-act="op" data-op="drop" data-num="${t.num}">Удалить</button>`);
   const steps = t.steps.length
-    ? `<ul class="steps">${t.steps.map((s) => `<li class="${s.done ? "done" : ""}"><button class="check" data-act="${s.done ? "" : "done"}" data-num="${s.num}" aria-label="Готово">${TICK}</button><span>${esc(s.title)}</span></li>`).join("")}</ul>`
+    ? `<ul class="steps">${t.steps.map((s) => `<li class="${s.done ? "done" : s.focus ? "is-focus" : ""}"><button class="check" data-act="${s.done ? "" : "done"}" data-num="${s.num}" aria-label="Готово">${TICK}</button><span>${esc(s.title)}${s.focus && !s.done ? ' <span class="focus-label">🟨 Главное</span>' : ""}</span></li>`).join("")}</ul>`
     : "";
-  return `<div class="row task" data-num="${t.num}">
+  return `<div class="row task${t.focus ? " is-focus" : ""}" data-num="${t.num}">
     <button class="check ${t.optional ? "opt" : ""}" data-act="done" data-num="${t.num}" aria-label="Готово">${TICK}</button>
     <div class="body" data-act="toggle" data-num="${t.num}">
       <div class="title">${esc(t.title)}</div>${meta(t, { showDate: where === "later" || where === "project" })}
@@ -168,6 +169,43 @@ function taskRow(t, where) {
 }
 
 const cardOf = (rows) => (rows.length ? `<div class="card">${rows.join("")}</div>` : "");
+
+// One manual marker, independent of urgency, dates and “in progress”.
+const focusPending = new Set();
+function focusButton(t, wide = false) {
+  return `<button class="focus-toggle${wide ? " wide" : ""}" data-act="focus" data-num="${t.num}" data-value="${t.focus ? "0" : "1"}" aria-pressed="${!!t.focus}" title="${t.focus ? "Снять отметку «Главное»" : "Отметить как главное"}"${focusPending.has(t.num) ? " disabled" : ""}>🟨 Главное</button>`;
+}
+function syncFocusButtons(num) {
+  const t = findTask(num);
+  document.querySelectorAll(`[data-act="focus"][data-num="${num}"]`).forEach((b) => {
+    b.disabled = focusPending.has(num) || !t;
+    b.dataset.value = t?.focus ? "0" : "1";
+    b.setAttribute("aria-pressed", String(!!t?.focus));
+    b.title = t?.focus ? "Снять отметку «Главное»" : "Отметить как главное";
+  });
+}
+async function changeFocus(num, value) {
+  if (!findTask(num) || focusPending.has(num)) return;
+  focusPending.add(num);
+  syncFocusButtons(num);
+  document.body.classList.add("busy");
+  try {
+    const r = await call({ op: "focus", num, value });
+    S = r.state ?? r;
+    tg?.HapticFeedback?.notificationOccurred("success");
+    if (r.reply) toast(r.reply, !!r.undoable);
+    render();
+  } catch (e) {
+    tg?.HapticFeedback?.notificationOccurred("error");
+    toast(e.message);
+    // Keep the server's marker and any open draft; no sheet or form is rebuilt on failure.
+  } finally {
+    focusPending.delete(num);
+    syncFocusButtons(num);
+    document.body.classList.remove("busy");
+  }
+}
+
 
 // ---------- periods: date ranges that change the room for tasks ----------
 const PERIOD_KINDS = { trip: "Поездка", guests: "Гости", rest: "Отдых", work: "Интенсивная работа" };
@@ -286,6 +324,7 @@ function viewDay() {
 function viewWeek() {
   const days = S.days.map((d, i) => {
     // The bar: how much of the day's room for tasks is already taken. Room = time of the tasks set for the day + what is still free in the windows.
+    const main = [...d.tasks, ...(i === 0 ? S.working ?? [] : [])].filter((t, n, ts) => t.focus && ts.findIndex((x) => x.num === t.num) === n);
     const cap = d.loadMin + d.freeMin;
     const pct = cap ? Math.min(100, Math.round((d.loadMin / cap) * 100)) : 0;
     const loose = d.tasks.filter((t) => !t.slot && !t.time && !t.optional).reduce((s, t) => s + (t.est || 30), 0);
@@ -297,6 +336,7 @@ function viewWeek() {
       <div class="bar ${over ? "over" : ""}"><i style="width:${pct}%"></i></div>
       ${periodsOn(d.date).length ? `<span class="period-badges">${periodsOn(d.date).map((p) => periodBadge(p, false)).join("")}</span>` : ""}
       <p>${over ? "Не всё влезает в окна. " : ""}${room}${fixed ? `${room ? " · " : ""}${fixed}` : ""}</p>
+      ${main.length ? `<span class="week-focus"><b>🟨 Главное:</b> ${main.map((t) => esc(t.title)).join(" · ")}</span>` : ""}
     </button>`;
   }).join("");
   // Closed tasks, grouped by day: proof that the pile does move.
@@ -444,11 +484,11 @@ function viewProjects() {
     b: () => list.map((p) => `<button class="prow" style="--h:${hue(p.name)}" data-act="proj" data-name="${esc(p.name)}">
         <div class="head"><b>${title(p)}</b><span>${p.ready.length} · ${count(p)}</span></div>
         <div class="bar"><i style="width:${Math.round((p.min / max) * 100)}%"></i></div>
-        <p>${p.deadline ? `${esc(p.deadline)} · ` : ""}${p.ready[0] ? esc(p.ready[0].title) : "задач на сейчас нет"}</p></button>`).join(""),
+        <p>${p.deadline ? `${esc(p.deadline)} · ` : ""}${p.ready[0] ? `${p.ready[0].focus ? '<span class="focus-label">🟨 Главное</span> ' : ""}${esc(p.ready[0].title)}` : "задач на сейчас нет"}</p></button>`).join(""),
     // C: big tiles with the first three tasks visible.
     c: () => list.map((p) => `<button class="ptile" style="--h:${hue(p.name)}" data-act="proj" data-name="${esc(p.name)}">
         <div class="head"><b>${title(p)}</b><span>${p.ready.length} · ${count(p)}</span></div>
-        <ul>${p.ready.slice(0, 3).map((t) => `<li>${esc(t.title)}</li>`).join("")}</ul>
+        <ul>${p.ready.slice(0, 3).map((t) => `<li class="${t.focus ? "is-focus" : ""}">${t.focus ? '<span class="focus-label">🟨 Главное</span> ' : ""}${esc(t.title)}</li>`).join("")}</ul>
         ${p.deadline ? `<span class="dl">${esc(p.deadline)}</span>` : ""}</button>`).join(""),
   }[pview]();
   return `<p class="sum">Выбери проект, которым займёшься сейчас.</p>${body}
@@ -630,13 +670,13 @@ function viewLine() {
   }).join("")).join("");
   const body = order.map(([name, cells]) => `<div class="lname" title="${esc(name || "Без проекта")}">${esc(name || "Без проекта")}</div>` + dates.map((d) => {
     const c = cells.get(d) ?? [];
-    const tip = c.map((x) => `${x.kind === "dl" ? "срок: " : x.t.after ? "ждёт: " : ""}${x.t.title}`).join(" · ");
-    const marks = c.slice(0, 4).map((x) => `<span class="${x.kind === "dl" ? "dl" : x.t.after ? "held" : x.t.working ? "work" : x.t.urgent ? "hot" : "task"}"></span>`).join("") + (c.length > 4 ? `<small>+${c.length - 4}</small>` : "");
+    const tip = c.map((x) => `${x.t.focus ? "🟨 Главное · " : ""}${x.kind === "dl" ? "срок: " : x.t.after ? "ждёт: " : ""}${x.t.title}`).join(" · ");
+    const marks = c.slice(0, 4).map((x) => `<span class="${x.kind === "dl" ? "dl" : x.t.after ? "held" : x.t.working ? "work" : x.t.urgent ? "hot" : "task"}${x.t.focus ? " focus-mark" : ""}"></span>`).join("") + (c.length > 4 ? `<small>+${c.length - 4}</small>` : "");
     return `<div class="lcell ${offs.has(d) ? "off" : ""} ${d === S.today ? "today" : ""}" ${tip ? `data-tip="${esc(tip)}"` : ""}>${marks}</div>`;
   }).join("")).join("");
   return `<p class="sum">Четыре недели вперёд по проектам. Точка: задача на этот день, ромб: срок, полая точка: ждёт другую задачу. Наведи, чтобы увидеть названия.</p>
     <div class="line"><div class="lgrid" style="--days:${DAYS}"><div class="lname head"></div>${head}${periodRows}${body}</div></div>
-    <div class="vkey"><span><i class="lm task"></i>задача</span><span><i class="lm hot"></i>срочная</span><span><i class="lm work"></i>в работе</span><span><i class="lm dl"></i>срок</span><span><i class="lm held"></i>ждёт другую</span><span><i class="sw offsw"></i>выходной</span></div>`;
+    <div class="vkey"><span><i class="lm task"></i>задача</span><span><i class="lm hot"></i>срочная</span><span><i class="lm work"></i>в работе</span><span><i class="lm dl"></i>срок</span><span><i class="lm held"></i>ждёт другую</span><span><i class="lm focus-mark"></i>главное</span><span><i class="sw offsw"></i>выходной</span></div>`;
 }
 
 // One tooltip for every chart mark that carries data-tip.
@@ -758,6 +798,7 @@ document.addEventListener("click", (e) => {
   }
   if (act === "op") return void run({ op, num: Number(num) });
   if (act === "move") return void run({ op: "move", num: Number(num), date });
+  if (act === "focus") return void changeFocus(Number(num), el.dataset.value === "1");
   if (act === "optional") return void run({ op: "optional", num: Number(num), value: el.dataset.value === "1" });
   if (act === "voice") return void openChat(Number(num), true);
   if (act === "chat") return void openChat(Number(num));
@@ -987,6 +1028,7 @@ function openSheet(num) {
   const quick = [0, 1, 2, 3].map((i) => `<button data-sheet="move" data-date="${day(i).date}">${esc(day(i).label)}${day(i).label === day(i).sub ? "" : `<small>${esc(day(i).sub)}</small>`}</button>`).join("");
   $("sheet").innerHTML = `<h3>${esc(t.title)}</h3>
     <div class="grid">
+      ${focusButton(t, true)}
       <button class="wide" data-sheet="edit">Изменить текст…<small>название и заметка</small></button>
       ${quick}
       ${MOUSE ? '<button class="wide" data-sheet="calendar">На дату…<small>до этого дня скрыта</small></button>'

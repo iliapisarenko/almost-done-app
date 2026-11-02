@@ -378,3 +378,19 @@ h2.sep { margin-top: 26px; }
 .lperiod-cell.last { border-radius: 0 6px 6px 0; }
 .lperiod-cell.first.last { border-radius: 6px; }
 .period-badge:focus-visible, .lperiod-cell:focus-visible, .lperiod-name:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Main tasks keep a quiet yellow surface; the label also works without colour. */
+:root {
+  --focus-surface: color-mix(in srgb, #f4ca42 19%, var(--card));
+  --focus-edge: #b3921b;
+}
+.row.task.is-focus, .steps li.is-focus, .ptile li.is-focus { background: var(--focus-surface); }
+.row.task.is-focus { box-shadow: inset 3px 0 var(--focus-edge); }
+.row.task.is-focus.held { background: var(--focus-surface); }
+.focus-label { color: var(--text); font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.steps li.is-focus, .ptile li.is-focus { border-radius: 6px; padding: 4px 6px; }
+.week-focus { display: block; margin-top: 8px; border-radius: 8px; padding: 7px 9px; background: var(--focus-surface); color: var(--text); font-size: 13px; overflow-wrap: anywhere; }
+.acts .focus-toggle[aria-pressed="true"], .sheet .focus-toggle[aria-pressed="true"] { background: var(--focus-surface); color: var(--text); box-shadow: inset 0 0 0 2px var(--focus-edge); }
+.focus-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.acts .focus-toggle:disabled { opacity: .5; }
+.lcell span.focus-mark, .lm.focus-mark { outline: 2px solid var(--focus-edge); outline-offset: 1px; }
