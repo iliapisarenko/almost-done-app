@@ -49,6 +49,21 @@ let dayIx = 0;
 const open = new Set(); // expanded task numbers
 
 const $ = (id) => document.getElementById(id);
+function growTextField(field) {
+  if (!field?.matches?.("textarea.auto-grow")) return;
+  field.style.height = "auto";
+  const viewport = window.visualViewport?.height ?? window.innerHeight;
+  const available = field.closest(".chat-compose") ? Math.min(viewport * .4, 320)
+    : field.closest(".mem.note.add") ? viewport * .3 : Math.min(viewport * .45, 420);
+  const cssLimit = parseFloat(getComputedStyle(field).maxHeight);
+  const limit = Math.min(available, Number.isFinite(cssLimit) ? cssLimit : available);
+  const height = field.scrollHeight;
+  field.style.height = `${Math.min(height, limit)}px`;
+  field.style.overflowY = height > limit ? "auto" : "hidden";
+}
+function growTextFields(root) {
+  root.querySelectorAll("textarea.auto-grow").forEach(growTextField);
+}
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const dur = (m) => {
   const h = Math.floor(m / 60), r = m % 60;
@@ -247,7 +262,7 @@ function openPeriodSheet(id = null, date = S.today) {
   if (id && !p) return toast("Период больше не найден. Обнови страницу.");
   periodEditing = p?.id ?? null;
   $("sheet").innerHTML = `<h3>${p ? "Изменить период" : "Новый период"}</h3>
-    <label class="flabel">Название<input class="field" id="periodTitle" type="text" maxlength="120" required placeholder="Например, поездка в Рим" value="${esc(p?.title ?? "")}"></label>
+    <label class="flabel">Название<textarea class="field auto-grow" id="periodTitle" rows="1" maxlength="120" required placeholder="Например, поездка в Рим">${esc(p?.title ?? "")}</textarea></label>
     <label class="flabel">Тип<select class="field" id="periodKind">${Object.entries(PERIOD_KINDS).map(([key, label]) => `<option value="${key}" ${(p?.kind ?? "trip") === key ? "selected" : ""}>${label}</option>`).join("")}</select></label>
     <div class="period-dates"><label class="flabel">Начало<input class="field" id="periodStart" type="date" required value="${esc(p?.startDate ?? date)}"></label>
       <label class="flabel">Окончание включительно<input class="field" id="periodEnd" type="date" min="${esc(p?.startDate ?? date)}" value="${esc(p?.endDate ?? "")}"></label></div>
@@ -262,6 +277,7 @@ function openPeriodSheet(id = null, date = S.today) {
   $("sheet").dataset.num = "";
   $("sheet").hidden = false;
   $("veil").hidden = false;
+  growTextFields($("sheet"));
 }
 
 async function changePeriod(remove = false) {
@@ -383,7 +399,7 @@ function viewBacklog() {
 /** Remembered facts as an editable list: ✕ forgets one, the field below adds one. `project` = its number, "" = about the person. */
 function noteList(notes, project) {
   return `<div class="card">${notes.map((n) => `<div class="mem note"><span>${esc(n.text)}</span><button data-act="note-del" data-num="${n.num}" aria-label="Забыть">✕</button></div>`).join("")}
-    <div class="mem note add"><input type="text" placeholder="Добавить факт…" data-note-for="${project}" enterkeyhint="done"><button data-act="note-add" aria-label="Добавить">＋</button></div></div>`;
+    <div class="mem note add"><textarea class="auto-grow" rows="1" placeholder="Добавить факт…" data-note-for="${project}"></textarea><button data-act="note-add" aria-label="Добавить">＋</button></div></div>`;
 }
 
 const STAGE_RU = { idle: "на паузе", launch: "запуск", rhythm: "идёт" };
@@ -893,6 +909,7 @@ async function openChat(num = null, record = false, done = null) {
   $("chatText").placeholder = done ? "Изменить её или поставить следующую…" : t ? "Что сделать с этой задачей?" : "Написать планеру…";
   $("chatText").maxLength = done || t ? 1500 : 2000;
   $("chatText").value = "";
+  growTextField($("chatText"));
   $("chatText").disabled = false;
   $("chatMic").disabled = false;
   $("chatSend").disabled = true;
@@ -938,6 +955,7 @@ async function sendChat() {
       chatBubble("user", text);
       chatBubble("agent", r.reply || "Готово.", !!r.undoable);
       field.value = "";
+      growTextField(field);
       chatStatus();
     }
     tg?.HapticFeedback?.notificationOccurred("success");
@@ -988,6 +1006,7 @@ async function startVoice() {
         if (voiceSession !== v) return;
         if (!text?.trim()) return chatStatus("Ничего не расслышал. Попробуй ещё раз.");
         $("chatText").value = [$("chatText").value.trim(), text.trim()].filter(Boolean).join(" ").slice(0, $("chatText").maxLength);
+        growTextField($("chatText"));
         $("chatSend").disabled = false;
         chatStatus("Проверь текст и отправь.");
         $("chatText").focus();
@@ -1091,14 +1110,15 @@ function openEditSheet(num) {
   const t = findTask(num);
   if (!t) return;
   $("sheet").innerHTML = `<h3>Изменить задачу</h3>
-    <label class="flabel">Название<input id="editTitle" class="field" type="text" maxlength="300" value="${esc(t.title)}" enterkeyhint="done"></label>
-    <label class="flabel">Заметка<textarea id="editNotes" class="field" rows="4" maxlength="1000" placeholder="Детали, ссылки, что уже сделано">${esc(t.notes ?? "")}</textarea></label>
+    <label class="flabel">Название<textarea id="editTitle" class="field auto-grow" rows="1" maxlength="300" placeholder="Название задачи">${esc(t.title)}</textarea></label>
+    <label class="flabel">Заметка<textarea id="editNotes" class="field auto-grow" rows="1" maxlength="1000" placeholder="Детали, ссылки, что уже сделано">${esc(t.notes ?? "")}</textarea></label>
     <div class="grid"><button class="wide" data-sheet="editsave">Сохранить</button><button class="wide cancel" data-sheet="calback">Назад</button></div>`;
   $("sheet").dataset.num = num;
+  growTextFields($("sheet"));
   const f = $("editTitle");
   f.focus();
   f.setSelectionRange(f.value.length, f.value.length);
-  f.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveEdit(num); } });
+  f.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); saveEdit(num); } });
 }
 
 function saveEdit(num) {
@@ -1152,14 +1172,14 @@ function openRoutineSheet(num, keep = false) {
   }
   const d = rdraft;
   $("sheet").innerHTML = `<h3>${d.num ? "Пункт расписания" : "Новый пункт расписания"}</h3>
-    <input class="field" id="rTitle" type="text" placeholder="Название: зал, съёмка, французский" value="${esc(d.title)}">
+    <textarea class="field auto-grow" id="rTitle" rows="1" placeholder="Название: зал, съёмка, французский">${esc(d.title)}</textarea>
     <div class="grid">
       <button data-sheet="rkind" data-v="fixed" class="${d.kind === "fixed" ? "on" : ""}">Постоянное<small>стоит в календаре</small></button>
       <button data-sheet="rkind" data-v="window" class="${d.kind === "window" ? "on" : ""}">Окно для дел<small>сюда встают задачи</small></button>
     </div>
     <div class="days">${DAYS.map(([k, l]) => `<button data-sheet="rday" data-v="${k}" class="${d.days.has(k) ? "on" : ""}">${l}</button>`).join("")}</div>
     <div class="times"><label>с<input id="rStart" type="time" value="${d.start}"></label><label>до<input id="rEnd" type="time" value="${d.end}"></label></div>
-    ${d.kind === "window" ? `<input class="field" id="rHint" type="text" placeholder="Что сюда ставить: люди и созвоны, работа головой" value="${esc(d.hint)}">` : ""}
+    ${d.kind === "window" ? `<textarea class="field auto-grow" id="rHint" rows="1" placeholder="Что сюда ставить: люди и созвоны, работа головой">${esc(d.hint)}</textarea>` : ""}
     <div class="grid">
       <button class="wide go" data-sheet="rsave">Сохранить</button>
       ${d.num ? '<button class="wide danger" data-sheet="rdel">Убрать из расписания</button>' : ""}
@@ -1167,6 +1187,7 @@ function openRoutineSheet(num, keep = false) {
   $("sheet").dataset.num = d.num ?? "";
   $("sheet").hidden = false;
   $("veil").hidden = false;
+  growTextFields($("sheet"));
 }
 
 function openTrackSheet(num) {
@@ -1325,6 +1346,9 @@ $("sayOpen").addEventListener("click", () => openChat());
 $("sayMic").addEventListener("click", () => openChat(null, true));
 $("chatClose").addEventListener("click", closeChat);
 $("chatMic").addEventListener("click", startVoice);
+document.addEventListener("input", (e) => growTextField(e.target));
+window.visualViewport?.addEventListener("resize", () => growTextFields(document));
+window.addEventListener("resize", () => growTextFields(document));
 $("chatText").addEventListener("input", (e) => ($("chatSend").disabled = !e.target.value.trim()));
 $("chatText").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(); }

@@ -224,7 +224,7 @@ h2 span { text-transform: none; letter-spacing: 0; font-weight: 500; }
 .chat-compose button:disabled { opacity: .4; }
 .chat-compose .chat-mic.recording { background: #d5443f; animation: voice-pulse 1.3s ease-in-out infinite; }
 @keyframes voice-pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, #d5443f 25%, transparent); } }
-.chat-compose textarea { flex: 1; min-width: 0; max-height: 140px; min-height: 40px; resize: none; border: 0; outline: 0; background: var(--card); color: var(--text); border-radius: 18px; padding: 10px 13px; font: inherit; }
+.chat-compose textarea { flex: 1; min-width: 0; max-height: min(40dvh, 320px); min-height: 40px; resize: none; border: 0; outline: 0; background: var(--card); color: var(--text); border-radius: 18px; padding: 10px 13px; font: inherit; }
 .chat-compose textarea::placeholder { color: var(--muted); }
 .busy { opacity: .55; pointer-events: none; }
 
@@ -285,7 +285,7 @@ h2.sep { margin-top: 26px; }
 .pabout { color: var(--muted); font-size: 14px; margin: 0 2px 10px; }
 
 .sheet .flabel { display: block; text-align: left; background: none; padding: 0; margin: 0 2px 10px; font-weight: 600; font-size: 13px; color: var(--muted); }
-.sheet .flabel .field { position: static; opacity: 1; display: block; width: 100%; height: auto; margin-top: 4px; border: 0; outline: 0; background: var(--card); color: var(--text); border-radius: 10px; padding: 10px 12px; font-family: inherit; font-size: 15px; line-height: 1.35; font-weight: 400; resize: vertical; }
+.sheet .flabel .field { position: static; opacity: 1; display: block; width: 100%; height: auto; margin-top: 4px; border: 0; outline: 0; background: var(--card); color: var(--text); border-radius: 10px; padding: 10px 12px; font-family: inherit; font-size: 15px; line-height: 1.35; font-weight: 400; }
 .calhead { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 8px; }
 .calhead b { font-size: 15px; }
 .calpad { width: 50px; } /* stands in for «‹» in the current month, so the name stays centred */
@@ -328,9 +328,10 @@ h2.sep { margin-top: 26px; }
 .mem.note { display: flex; align-items: flex-start; gap: 8px; }
 .mem.note span { flex: 1; font-size: 14px; overflow-wrap: anywhere; }
 .mem.note button { flex: 0 0 30px; height: 30px; border-radius: 50%; background: var(--bg); color: var(--muted); font-size: 14px; }
-.mem.note.add input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 14px; padding: 5px 0; }
+.mem.note.add textarea { flex: 1; min-width: 0; max-height: 30dvh; border: 0; outline: 0; resize: none; background: transparent; color: var(--text); font: inherit; font-size: 14px; padding: 5px 0; }
 .mem.note.add button { color: var(--accent); font-size: 18px; }
 .sheet .field { display: block; width: 100%; border: 0; outline: 0; background: var(--card); color: var(--text); border-radius: 12px; padding: 12px 14px; font: inherit; margin-bottom: 8px; }
+.sheet textarea.auto-grow { max-height: min(45dvh, 420px); resize: none; overflow-y: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
 .sheet .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin: 8px 0; }
 .sheet .days button { padding: 10px 0; font-size: 14px; }
 .sheet .days button.on, .sheet .grid button.on { background: var(--accent); color: var(--on-accent); box-shadow: none; }

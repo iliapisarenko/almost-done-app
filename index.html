@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#2f7cf6">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<link rel="stylesheet" href="style.css?v=20261102034851">
+<link rel="stylesheet" href="style.css?v=202611061743">
 </head>
 <body>
 <header class="top">
@@ -34,7 +34,7 @@
   <p class="chat-status" id="chatStatus" role="status" hidden></p>
   <form class="chat-compose" id="chatCompose" autocomplete="off">
     <button class="chat-mic" id="chatMic" type="button" aria-label="Начать запись" title="Голосом">🎙</button>
-    <textarea id="chatText" rows="1" maxlength="2000" placeholder="Написать планеру…" aria-label="Сообщение планеру"></textarea>
+    <textarea id="chatText" class="auto-grow" rows="1" maxlength="2000" placeholder="Написать планеру…" aria-label="Сообщение планеру"></textarea>
     <button class="chat-send" id="chatSend" type="submit" aria-label="Отправить" disabled>↑</button>
   </form>
 </section>
@@ -42,6 +42,6 @@
   <button id="sayOpen" type="button" aria-label="Открыть чат с планером">Чат с планером <span>›</span></button>
   <button id="sayMic" type="button" aria-label="Начать голосовое сообщение" title="Голосом">🎙</button>
 </form>
-<script src="app.js?v=20261102034851"></script>
+<script src="app.js?v=202611061743"></script>
 </body>
 </html>
